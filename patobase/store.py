@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .sources import Source
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS questions (
     id          INTEGER PRIMARY KEY,
@@ -34,6 +36,14 @@ CREATE TABLE IF NOT EXISTS dashboard_cards (
     question_id  INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
     position     INTEGER NOT NULL DEFAULT 0,
     width        INTEGER NOT NULL DEFAULT 1   -- 1 = media anchura, 2 = anchura completa
+);
+CREATE TABLE IF NOT EXISTS sources (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    kind        TEXT NOT NULL,
+    config      TEXT NOT NULL DEFAULT '{}',
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
 
@@ -152,3 +162,39 @@ class Store:
     def update_card(self, card_id: int, width: int) -> None:
         with self._conn() as c:
             c.execute("UPDATE dashboard_cards SET width = ? WHERE id = ?", (width, card_id))
+
+    # ---------------------------------------------------------------- sources
+    @staticmethod
+    def _src(r: sqlite3.Row) -> Source:
+        return Source(r["id"], r["name"], r["kind"], json.loads(r["config"]), bool(r["enabled"]))
+
+    def list_sources(self) -> list[Source]:
+        with self._conn() as c:
+            return [self._src(r) for r in c.execute("SELECT * FROM sources ORDER BY name")]
+
+    def get_source(self, sid: int) -> Source | None:
+        with self._conn() as c:
+            r = c.execute("SELECT * FROM sources WHERE id = ?", (sid,)).fetchone()
+            return self._src(r) if r else None
+
+    def save_source(self, src: Source) -> int:
+        with self._conn() as c:
+            if src.id:
+                c.execute(
+                    "UPDATE sources SET name=?, kind=?, config=?, enabled=? WHERE id=?",
+                    (src.name, src.kind, json.dumps(src.config), int(src.enabled), src.id),
+                )
+                return src.id
+            cur = c.execute(
+                "INSERT INTO sources (name, kind, config, enabled) VALUES (?, ?, ?, ?)",
+                (src.name, src.kind, json.dumps(src.config), int(src.enabled)),
+            )
+            return int(cur.lastrowid)
+
+    def set_source_enabled(self, sid: int, enabled: bool) -> None:
+        with self._conn() as c:
+            c.execute("UPDATE sources SET enabled = ? WHERE id = ?", (int(enabled), sid))
+
+    def delete_source(self, sid: int) -> None:
+        with self._conn() as c:
+            c.execute("DELETE FROM sources WHERE id = ?", (sid,))

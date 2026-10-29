@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Fuentes de datos{% endblock %}
+{% block content %}
+<div class="page-head">
+  <hgroup>
+    <h2>Fuentes de datos</h2>
+    <p class="muted">Bases de datos y ficheros que se pueden consultar desde el editor.</p>
+  </hgroup>
+  <div class="head-actions">
+    <button class="secondary outline" hx-post="/sources/reload" hx-target="#sources-table"
+            hx-on:htmx:before-request="this.setAttribute('aria-busy','true')"
+            hx-on:htmx:after-request="this.removeAttribute('aria-busy')"
+            data-tooltip="Vuelve a conectar todas las fuentes y relee la carpeta de datos"
+            data-placement="bottom">↻ Recargar</button>
+    <a href="/sources/new" role="button">Añadir fuente</a>
+  </div>
+</div>
+
+<section id="sources-table">
+  {% include "partials/sources_table.html" %}
+</section>
+{% endblock %}

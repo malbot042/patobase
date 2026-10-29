@@ -1,0 +1,12 @@
+{% if ok %}
+<article class="result-ok" role="status">
+  <strong>✓ Conexión correcta</strong> · {{ n }} {{ unit }}{{ '' if n == 1 else 's' }}
+  {% if names %}<br><small class="mono muted">{{ names|join(" · ") }}{% if n > names|length %} …{% endif %}</small>{% endif %}
+</article>
+{% else %}
+<article class="error-box" role="alert">
+  <strong>{{ "Guardada, pero no se puede conectar" if saved else "No se puede conectar" }}</strong>
+  <pre>{{ message }}</pre>
+  {% if saved %}<small><a href="/sources">Volver a la lista</a> · la fuente aparece como «Error» hasta que funcione.</small>{% endif %}
+</article>
+{% endif %}

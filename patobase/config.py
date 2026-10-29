@@ -15,6 +15,8 @@ class Settings:
     meta_db: Path = field(default_factory=lambda: Path(os.getenv("PATOBASE_META_DB", "patobase_meta.sqlite")))
     # Sentencias ATTACH extra (separadas por ';'), p. ej. Postgres/MySQL
     extra_attach: str = field(default_factory=lambda: os.getenv("PATOBASE_ATTACH", ""))
+    # Carpeta de extensiones DuckDB (para servidores sin salida a Internet)
+    extension_dir: str = field(default_factory=lambda: os.getenv("PATOBASE_EXTENSION_DIR", ""))
     page_size: int = int(os.getenv("PATOBASE_PAGE_SIZE", "100"))
     chart_rows: int = int(os.getenv("PATOBASE_CHART_ROWS", "2000"))
     timeout_s: float = float(os.getenv("PATOBASE_TIMEOUT", "30"))

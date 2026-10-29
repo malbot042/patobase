@@ -12,8 +12,11 @@
 <aside class="sidebar" x-data="{ filter: '' }">
   <div class="sidebar-head">
     <h6>Datos</h6>
-    <button class="icon-btn" title="Recargar esquema" data-tooltip="Recargar esquema" data-placement="left"
-            hx-get="/schema" hx-target="#schema-tree" hx-swap="innerHTML">↻</button>
+    <span>
+      <a href="/sources/new" class="icon-btn" data-tooltip="Añadir fuente" data-placement="left">＋</a>
+      <button class="icon-btn" data-tooltip="Recargar esquema" data-placement="left"
+              hx-get="/schema" hx-target="#schema-tree" hx-swap="innerHTML">↻</button>
+    </span>
   </div>
   <input type="search" placeholder="Filtrar tablas…" x-model="filter" aria-label="Filtrar tablas">
   <div id="schema-tree" hx-get="/schema" hx-trigger="load" hx-swap="innerHTML">

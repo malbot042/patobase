@@ -1,0 +1,69 @@
+{% if sources %}
+<div class="overflow-auto">
+  <table class="sources">
+    <thead>
+      <tr>
+        <th scope="col">Nombre</th>
+        <th scope="col">Tipo</th>
+        <th scope="col">Conexión</th>
+        <th scope="col">Estado</th>
+        <th scope="col">Activa</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      {% set st = status.get(s.name) %}
+      <tr id="src-{{ s.id }}" class="{{ '' if s.enabled else 'disabled' }}">
+        <td>
+          <a href="/sources/{{ s.id }}/edit"><strong>{{ s.name }}</strong></a><br>
+          <code class="sql-snippet">{{ s.where() }}</code>
+        </td>
+        <td><span class="kind kind-{{ s.kind }}">{{ kinds[s.kind].label }}</span></td>
+        <td><small class="mono">{{ s.summary() }}</small></td>
+        <td>
+          {% if not s.enabled %}
+            <small class="muted">Desactivada</small>
+          {% elif st and st.ok %}
+            <span class="status ok">● Conectada</span>
+            <small class="muted">· {{ st.tables }} {{ 'tabla' if s.kind in ['postgres','mysql','sqlite','duckdb'] else 'columna' }}{{ '' if st.tables == 1 else 's' }}</small>
+          {% elif st %}
+            <span class="status err">● Error</span>
+            <small class="err-msg" title="{{ st.message }}">{{ st.message }}</small>
+          {% else %}
+            <small class="muted">Pendiente de recargar</small>
+          {% endif %}
+        </td>
+        <td>
+          <input type="checkbox" role="switch" aria-label="Activar {{ s.name }}"
+                 {% if s.enabled %}checked{% endif %}
+                 hx-post="/sources/{{ s.id }}/toggle" hx-target="#sources-table" hx-trigger="change">
+        </td>
+        <td class="actions">
+          <a href="/sources/{{ s.id }}/edit" class="icon-btn" data-tooltip="Editar" data-placement="left">✎</a>
+          <button class="icon-btn danger" data-tooltip="Borrar" data-placement="left"
+                  hx-post="/sources/{{ s.id }}/delete" hx-target="#sources-table"
+                  hx-confirm="¿Borrar la fuente «{{ s.name }}»? Las preguntas que la usen dejarán de funcionar.">✕</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<article class="empty">
+  <p>Aún no hay fuentes externas.</p>
+  <small class="muted">Conecta Postgres, MySQL, SQLite, otro DuckDB, ficheros en S3 o una URL.</small>
+  <p><a href="/sources/new" role="button" class="secondary outline">Añadir la primera</a></p>
+</article>
+{% endif %}
+
+<details class="local-files">
+  <summary>Carpeta de datos local · {{ data_files|length }} fichero{{ '' if data_files|length == 1 else 's' }}</summary>
+  <p class="muted small">
+    Lo que copies en <code>{{ data_dir }}</code> aparece sin configurar nada:
+    los <code>.duckdb</code> como bases adjuntas y los <code>.parquet</code> / <code>.csv</code> en <code>files.*</code>.
+    Pulsa <strong>Recargar</strong> tras añadir ficheros.
+  </p>
+  {% if data_files %}<p class="small mono">{{ data_files|join(" · ") }}</p>{% endif %}
+</details>

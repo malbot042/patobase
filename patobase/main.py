@@ -3,16 +3,23 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import duckdb
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 
 from .config import settings
-from .engine import Engine, QueryError, suggest_chart, to_records, vega_type
+from .engine import Engine, QueryError, apply_source, suggest_chart, to_records, vega_type
+from .sources import ATTACHED, KINDS, Source, SourceError, from_form, q
 from .store import Store
 
 BASE = Path(__file__).parent
@@ -32,10 +39,26 @@ templates.env.filters["num"] = fmt_num
 templates.env.filters["tojson_attr"] = lambda v: json.dumps(v, ensure_ascii=False, default=str)
 
 
+_rebuild_lock = threading.Lock()
+_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="patobase-src")
+TEST_TIMEOUT_S = 20
+
+
+def rebuild_engine(app: FastAPI) -> Engine:
+    """Crea un motor nuevo con las fuentes actuales y lo sustituye en caliente.
+
+    Las consultas en curso siguen con el motor anterior hasta que terminan.
+    """
+    with _rebuild_lock:
+        new = Engine(settings, app.state.store.list_sources())
+        app.state.engine = new
+        return new
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.engine = Engine(settings)
     app.state.store = Store(settings.meta_db)
+    rebuild_engine(app)
     yield
     app.state.engine.con.close()
 
@@ -80,7 +103,9 @@ def editor(request: Request, q: int | None = None):
 
 @app.get("/schema", response_class=HTMLResponse)
 def schema(request: Request):
-    return render(request, "partials/schema_tree.html", schema=engine(request).schema())
+    eng = engine(request)
+    failing = [name for name, st in eng.status.items() if not st.ok]
+    return render(request, "partials/schema_tree.html", schema=eng.schema(), failing=failing)
 
 
 @app.get("/api/completions")
@@ -261,6 +286,130 @@ def remove_card(request: Request, card_id: int):
 def card_width(request: Request, card_id: int, width: int = Form(...)):
     store(request).update_card(card_id, 2 if width == 2 else 1)
     return Response("")
+
+
+# ---------------------------------------------------------------------------
+# Fuentes de datos
+# ---------------------------------------------------------------------------
+def taken_names(request: Request, exclude: int | None = None) -> set[str]:
+    names = {s.name for s in store(request).list_sources() if s.id != exclude}
+    names |= {f.stem.lower() for f in settings.data_dir.glob("*.duckdb")}
+    return names
+
+
+def sources_ctx(request: Request) -> dict:
+    eng = engine(request)
+    data_files = sorted(
+        f.name for f in settings.data_dir.glob("*") if f.suffix in (".duckdb", ".parquet", ".csv")
+    )
+    return {"sources": store(request).list_sources(), "status": eng.status, "kinds": KINDS,
+            "data_files": data_files, "data_dir": settings.data_dir.resolve()}
+
+
+@app.get("/sources", response_class=HTMLResponse)
+def sources_page(request: Request):
+    return render(request, "sources.html", **sources_ctx(request))
+
+
+@app.get("/sources/new", response_class=HTMLResponse)
+def source_new(request: Request, kind: str = ""):
+    return render(request, "source_edit.html", src=None, kind=kind if kind in KINDS else "", kinds=KINDS)
+
+
+@app.get("/sources/{sid}/edit", response_class=HTMLResponse)
+def source_edit(request: Request, sid: int):
+    src = store(request).get_source(sid)
+    if not src:
+        raise HTTPException(404, "Fuente no encontrada")
+    return render(request, "source_edit.html", src=src, kind=src.kind, kinds=KINDS,
+                  status=engine(request).status.get(src.name))
+
+
+@app.get("/sources/form", response_class=HTMLResponse)
+def source_form(request: Request, kind: str):
+    if kind not in KINDS:
+        return Response("")
+    return render(request, "partials/source_form.html", src=None, kind=kind, k=KINDS[kind])
+
+
+def _parse_source(request: Request, form: dict) -> Source:
+    sid = int(form["id"]) if str(form.get("id", "")).isdigit() else None
+    previous = store(request).get_source(sid) if sid else None
+    return from_form(str(form.get("kind", "")), form, previous, taken_names(request, sid))
+
+
+def _test_source(src: Source) -> tuple[int, list[str]]:
+    con = duckdb.connect(":memory:")
+    try:
+        if settings.extension_dir:
+            con.execute(f"SET extension_directory = {q(settings.extension_dir)}")
+        _, n = apply_source(con, src, settings.data_dir)
+        if src.kind in ATTACHED:
+            names = [r[0] for r in con.execute(
+                "SELECT schema_name || '.' || table_name FROM duckdb_tables() "
+                "WHERE database_name = ? AND schema_name NOT IN ('information_schema', 'pg_catalog') "
+                "ORDER BY 1 LIMIT 8", [src.name]).fetchall()]
+        else:
+            names = [r[0] for r in con.execute(f"DESCRIBE remote.{src.name}").fetchall()][:8]
+        return n, names
+    finally:
+        con.close()
+
+
+@app.post("/sources/test", response_class=HTMLResponse)
+async def source_test(request: Request):
+    form = dict(await request.form())
+    try:
+        src = _parse_source(request, form)
+        n, names = _pool.submit(_test_source, src).result(timeout=TEST_TIMEOUT_S)
+    except FutureTimeout:
+        return render(request, "partials/source_result.html", ok=False,
+                      message=f"Sin respuesta en {TEST_TIMEOUT_S} s.")
+    except SourceError as e:
+        return render(request, "partials/source_result.html", ok=False, message=str(e))
+    unit = "tabla" if src.kind in ATTACHED else "columna"
+    return render(request, "partials/source_result.html", ok=True, n=n, unit=unit, names=names)
+
+
+@app.post("/sources", response_class=HTMLResponse)
+async def source_save(request: Request):
+    form = dict(await request.form())
+    try:
+        src = _parse_source(request, form)
+    except SourceError as e:
+        return render(request, "partials/source_result.html", ok=False, message=str(e))
+    store(request).save_source(src)
+    new = await run_in_threadpool(rebuild_engine, request.app)
+    st = new.status.get(src.name)
+    if st and not st.ok:
+        # Se guarda igualmente (puede ser un corte temporal), pero se avisa
+        resp = render(request, "partials/source_result.html", ok=False, saved=True, message=st.message)
+        return resp
+    return Response(headers={"HX-Redirect": "/sources"})
+
+
+@app.post("/sources/reload", response_class=HTMLResponse)
+def sources_reload(request: Request):
+    rebuild_engine(request.app)
+    return render(request, "partials/sources_table.html", **sources_ctx(request))
+
+
+@app.post("/sources/{sid}/toggle", response_class=HTMLResponse)
+def source_toggle(request: Request, sid: int):
+    src = store(request).get_source(sid)
+    if src:
+        store(request).set_source_enabled(sid, not src.enabled)
+        rebuild_engine(request.app)
+    return render(request, "partials/sources_table.html", **sources_ctx(request))
+
+
+@app.post("/sources/{sid}/delete", response_class=HTMLResponse)
+def source_delete(request: Request, sid: int):
+    store(request).delete_source(sid)
+    rebuild_engine(request.app)
+    if request.headers.get("HX-Target") == "sources-table":
+        return render(request, "partials/sources_table.html", **sources_ctx(request))
+    return Response(headers={"HX-Redirect": "/sources"})
 
 
 def run() -> None:  # punto de entrada `patobase`

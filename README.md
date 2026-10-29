@@ -9,6 +9,7 @@ el estado de la interfaz.
 ## Qué hace
 
 - **Editor SQL** (CodeMirror) con resaltado, autocompletado de tablas y columnas reales y `Ctrl/⌘ + Enter`.
+- **Fuentes de datos desde la UI**: PostgreSQL, MySQL/MariaDB, SQLite, DuckDB, S3/GCS/R2/MinIO y URLs HTTP, con «Probar conexión», activar/desactivar y recarga en caliente.
 - **Explorador de esquemas**: todas las fuentes en el panel lateral; clic en una columna la inserta, «ver» lanza un `SELECT *`.
 - **Resultados** en tabla paginada en servidor, o como **gráfico** (barras, líneas, área, dispersión, sectores) con Vega-Lite. El gráfico se sugiere solo según los tipos de las columnas.
 - **Preguntas guardadas** con su configuración de gráfico.
@@ -17,18 +18,47 @@ el estado de la interfaz.
 
 ## Fuentes de datos
 
-Todo lo que pongas en la carpeta de datos (`./data` por defecto) aparece automáticamente:
+### Desde la interfaz (página **Fuentes**)
+
+| Tipo | Qué pide | Se consulta como |
+|---|---|---|
+| PostgreSQL | servidor, puerto, base, usuario, contraseña, esquema y SSL opcionales | `nombre.esquema.tabla` |
+| MySQL / MariaDB | servidor, puerto, base, usuario, contraseña | `nombre.base.tabla` |
+| SQLite | fichero dentro de la carpeta de datos | `nombre.main.tabla` |
+| DuckDB | fichero dentro de la carpeta de datos | `nombre.main.tabla` |
+| S3 / GCS / R2 / MinIO | ruta con comodines (`s3://bucket/ventas/*.parquet`), formato, credenciales, endpoint | `remote.nombre` |
+| URL (HTTP) | URL de un CSV, Parquet o JSON | `remote.nombre` |
+
+- **Probar conexión** antes de guardar muestra cuántas tablas o columnas ve y algunos nombres.
+- Al guardar, activar, desactivar o borrar una fuente, el motor se **reconstruye en caliente**, sin reiniciar. Las consultas en curso terminan con el motor anterior.
+- Una fuente que falla (host caído, contraseña incorrecta) **se marca en rojo** y no afecta al resto. El editor avisa en el panel lateral.
+- Antes de conectar con Postgres o MySQL se comprueba el puerto con un timeout de 5 s: la extensión de MySQL puede quedarse colgada minutos si el host no responde.
+- Los ficheros remotos admiten dos modos: **en vivo** (vista que lee el origen en cada consulta) o **copia en memoria** (se carga al recargar; más rápido para datos pequeños).
+- Las credenciales se pasan a DuckDB con `CREATE SECRET`, nunca en cadenas de conexión, y **no se vuelven a mostrar** en la interfaz.
+
+**Contraseñas.** Se guardan en la base de metadatos (`patobase_meta.sqlite`). Para no guardarlas, escribe `env:NOMBRE_VARIABLE` en el campo y define esa variable al arrancar:
+
+```bash
+export ERP_PASSWORD='...'
+patobase          # en el formulario: contraseña = env:ERP_PASSWORD
+```
+
+Usa siempre **usuarios de solo lectura** en las bases de datos: patobase adjunta en `READ_ONLY`, pero el permiso del propio servidor es la mejor garantía.
+
+**Extensiones de DuckDB.** Postgres, MySQL, SQLite y S3/HTTP necesitan extensiones que DuckDB descarga la primera vez. En un servidor sin salida a Internet, descárgalas en otra máquina y apunta `PATOBASE_EXTENSION_DIR` a esa carpeta.
+
+### Carpeta de datos
+
+Todo lo que pongas en la carpeta de datos (`./data` por defecto) aparece automáticamente, sin configurar nada. Usa **Recargar** en la página Fuentes después de añadir ficheros.
 
 | Fichero | Se ve como |
 |---|---|
 | `*.duckdb` | base adjunta en solo lectura: `nombre.main.tabla` |
 | `*.parquet`, `*.csv` | vista `files.nombre` |
 
-Para Postgres, MySQL, S3, etc. usa `PATOBASE_ATTACH` con sentencias `ATTACH` separadas por `;`:
+### Por variable de entorno
 
-```bash
-export PATOBASE_ATTACH="INSTALL postgres; LOAD postgres; ATTACH 'dbname=erp host=localhost user=lectura' AS erp (TYPE postgres, READ_ONLY)"
-```
+`PATOBASE_ATTACH` sigue disponible para casos avanzados: sentencias DuckDB separadas por `;` que se ejecutan al arrancar.
 
 ## Arrancar
 
@@ -41,15 +71,16 @@ patobase                      # http://127.0.0.1:8000
 
 Para desarrollar con recarga automática: `PATOBASE_RELOAD=1 patobase`.
 
-Tests: `pytest`.
+Tests: `pytest`. Los de integración contra Postgres, MySQL, S3 y HTTP reales se activan con `PATOBASE_IT=1`; las conexiones están documentadas al principio de `tests/test_sources.py`.
 
 ## Configuración
 
 | Variable | Por defecto | |
 |---|---|---|
 | `PATOBASE_DATA_DIR` | `data` | carpeta de fuentes |
-| `PATOBASE_META_DB` | `patobase_meta.sqlite` | preguntas y dashboards |
-| `PATOBASE_ATTACH` | | sentencias `ATTACH` extra |
+| `PATOBASE_META_DB` | `patobase_meta.sqlite` | preguntas, dashboards y fuentes |
+| `PATOBASE_ATTACH` | | sentencias DuckDB extra al arrancar |
+| `PATOBASE_EXTENSION_DIR` | | carpeta de extensiones DuckDB (servidores sin Internet) |
 | `PATOBASE_PAGE_SIZE` | `100` | filas por página en la tabla |
 | `PATOBASE_CHART_ROWS` | `2000` | filas máximas que se envían al gráfico |
 | `PATOBASE_TIMEOUT` | `30` | segundos antes de cancelar una consulta |
@@ -59,7 +90,7 @@ Tests: `pytest`.
 
 Al arrancar, después de adjuntar las fuentes, el motor:
 
-1. Limita la lectura de ficheros a la carpeta de datos (`allowed_directories`).
+1. Limita la lectura de ficheros a la carpeta de datos y a las rutas remotas configuradas en Fuentes (`allowed_directories` / `allowed_paths`). Cualquier otro bucket, URL o fichero queda bloqueado.
 2. Desactiva el acceso externo (`enable_external_access = false`).
 3. Bloquea la configuración (`lock_configuration = true`), así no se puede revertir desde el editor.
 
@@ -73,7 +104,8 @@ Además solo se aceptan sentencias de lectura (`SELECT`, `EXPLAIN`, `PRAGMA`/`SH
 patobase/
   config.py        variables de entorno
   engine.py        DuckDB: fuentes, sandbox, ejecución, sugerencia de gráfico
-  store.py         SQLite: preguntas, dashboards y tarjetas
+  sources.py       tipos de fuente, formularios, validación y SQL que las adjunta
+  store.py         SQLite: preguntas, dashboards, tarjetas y fuentes
   main.py          rutas FastAPI (páginas completas y parciales htmx)
   templates/       Jinja2; partials/ son los fragmentos que intercambia htmx
   static/app.css   layout de la app y ajustes de densidad sobre Pico CSS
@@ -88,7 +120,7 @@ Los metadatos van en SQLite y no en DuckDB porque son escrituras pequeñas y con
 ## Próximos pasos posibles
 
 - Parámetros en las preguntas (`WHERE fecha >= $desde`) y filtros globales del dashboard.
-- Usuarios y permisos por fuente.
+- Usuarios y permisos por fuente (y cifrar las contraseñas guardadas).
 - Caché de resultados con TTL.
 - Constructor visual de consultas (sin SQL) con SQLGlot o Ibis.
 - Reordenar tarjetas arrastrando.

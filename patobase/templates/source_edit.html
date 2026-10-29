@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ "Editar " ~ src.name if src else "Nueva fuente" }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/sources">Fuentes</a></li>
+    <li>{{ src.name if src else "Nueva fuente" }}</li>
+  </ul>
+</nav>
+
+{% if not src %}
+<h2>Nueva fuente de datos</h2>
+<p class="muted">Elige qué quieres conectar.</p>
+<div class="kind-picker" x-data="{ kind: '{{ kind }}' }">
+  {% for key, k in kinds.items() %}
+  <button type="button" class="kind-card" :aria-pressed="kind === '{{ key }}'"
+          @click="kind = '{{ key }}'"
+          hx-get="/sources/form?kind={{ key }}" hx-target="#source-form" hx-swap="innerHTML"
+          hx-push-url="/sources/new?kind={{ key }}">
+    <span class="kind kind-{{ key }}">{{ k.label }}</span>
+    <small class="muted">{{ k.description }}</small>
+  </button>
+  {% endfor %}
+</div>
+{% else %}
+<h2>{{ src.name }} <small class="kind kind-{{ src.kind }}">{{ kinds[src.kind].label }}</small></h2>
+{% if status and not status.ok %}
+<article class="error-box"><strong>Error al conectar</strong><pre>{{ status.message }}</pre></article>
+{% endif %}
+{% endif %}
+
+<div id="source-form">
+  {% if kind %}
+    {% with k = kinds[kind] %}{% include "partials/source_form.html" %}{% endwith %}
+  {% endif %}
+</div>
+{% endblock %}
