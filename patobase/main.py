@@ -11,11 +11,19 @@ from pathlib import Path
 
 import duckdb
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
+from . import exports
 from .builder import BuildError, catalog_from_schema, compile_spec, ui_catalog
 from .config import settings
 from .engine import Engine, QueryError, apply_source, find_cycle, question_deps, suggest_chart, to_records, vega_type
@@ -331,6 +339,56 @@ async def builder_run(request: Request):
     except BuildError as e:
         return render(request, "partials/error.html", error=str(e))
     return await run_in_threadpool(results_response, request, c.sql, viz)
+
+
+# ---------------------------------------------------------------------------
+# Exportar
+# ---------------------------------------------------------------------------
+def export_response(request: Request, sql: str, title: str, fmt: str) -> Response:
+    """CSV en streaming; Excel y PDF se generan completos y se envían."""
+    if fmt not in exports.FORMATS:
+        return PlainTextResponse("Formato no válido.", status_code=400)
+    media, ext = exports.FORMATS[fmt]
+    headers = {"Content-Disposition": exports.content_disposition(exports.filename(title, ext))}
+    eng = engine(request)
+    max_rows = settings.pdf_rows if fmt == "pdf" else settings.export_rows
+    ctx = eng.stream(sql, max_rows)
+    try:
+        st = ctx.__enter__()
+    except QueryError as e:
+        return PlainTextResponse(f"No se puede exportar: {e}", status_code=400)
+
+    if fmt == "csv":
+
+        def body():
+            try:
+                yield from exports.csv_chunks(st)
+            finally:
+                ctx.__exit__(None, None, None)
+
+        return StreamingResponse(body(), media_type=media, headers=headers)
+
+    try:
+        data = exports.to_xlsx(st, title, sql) if fmt == "xlsx" else exports.to_pdf(st, title, max_rows)
+    except QueryError as e:
+        return PlainTextResponse(f"No se puede exportar: {e}", status_code=400)
+    finally:
+        ctx.__exit__(None, None, None)
+    return Response(data, media_type=media, headers=headers)
+
+
+@app.post("/export/{fmt}")
+def export_result(request: Request, fmt: str, sql: str = Form(...), title: str = Form("")):
+    """Exporta el resultado que se está viendo en el editor SQL o visual."""
+    return export_response(request, sql, title, fmt)
+
+
+@app.get("/questions/{qid}/export/{fmt}")
+def export_question(request: Request, qid: int, fmt: str):
+    q = store(request).get_question(qid)
+    if not q:
+        return PlainTextResponse("La pregunta no existe.", status_code=404)
+    return export_response(request, q.sql, q.name, fmt)
 
 
 # ---------------------------------------------------------------------------

@@ -23,6 +23,58 @@
       const body = new URLSearchParams(data);
       return fetch(url, { method: "POST", body, headers: { "HX-Request": "true" } });
     },
+    toast(message, kind = "ok") {
+      const area = document.getElementById("toast");
+      if (!area) return;
+      const div = document.createElement("div");
+      div.className = `toast ${kind}`;
+      div.textContent = message;
+      area.replaceChildren(div);
+      setTimeout(() => div.remove(), kind === "error" ? 6000 : 3500);
+    },
+    // Descarga un export. Con `url` exporta una pregunta guardada; sin ella, el
+    // resultado del panel donde está el menú (su SQL va en data-sql).
+    async exportData(fmt, el, url = null) {
+      const menu = el.closest("details");
+      if (menu) menu.open = false;
+      const summary = menu && menu.querySelector("summary");
+      let req;
+      if (url) {
+        req = fetch(url);
+      } else {
+        const panel = el.closest(".result-panel");
+        const titleInput = document.querySelector("#save-form [name=name]");
+        const body = new URLSearchParams({
+          sql: panel ? panel.dataset.sql : "",
+          title: (titleInput && titleInput.value.trim()) || "Pregunta sin título",
+        });
+        req = fetch(`/export/${fmt}`, { method: "POST", body });
+      }
+      summary && summary.setAttribute("aria-busy", "true");
+      try {
+        const r = await req;
+        if (!r.ok) {
+          patobase.toast(await r.text(), "error");
+          return;
+        }
+        const blob = await r.blob();
+        const cd = r.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename\*=UTF-8''([^;]+)/) || cd.match(/filename="([^"]+)"/);
+        const name = m ? decodeURIComponent(m[1]) : `patobase.${fmt}`;
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+        patobase.toast(`Descargado: ${name}`);
+      } catch (e) {
+        patobase.toast("No se pudo exportar: error de red.", "error");
+      } finally {
+        summary && summary.removeAttribute("aria-busy");
+      }
+    },
   };
   window.patobase = patobase;
 

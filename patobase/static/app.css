@@ -346,3 +346,23 @@ main.builder-page { max-width: 1280px; }
   .nb-step select, .nb-step input { min-width: 0; width: 100%; }
   .question-bar { flex-wrap: wrap; }
 }
+
+/* -------------------------------------------------------------- exportar */
+.result-tools { display: flex; align-items: center; gap: 0.75rem; }
+.export-menu { margin: 0; }
+.export-menu > summary { display: inline-flex; align-items: center; gap: 0.35rem; }
+.export-menu > summary[role="button"] { padding: 0.25rem 0.75rem; font-size: 0.82rem; height: auto; }
+.export-menu > summary[role="button"]::after { margin-left: 0.25rem; }
+.export-menu > summary svg { width: 0.95rem; height: 0.95rem; }
+.export-menu.compact > summary::after { display: none; }
+.export-menu ul { min-width: 12rem; right: 0; left: auto; }
+.export-menu ul a { font-size: 0.88rem; }
+.card-head { gap: 0.25rem; }
+.card-head .card-title { flex: 1; }
+.export-menu > summary svg { flex: none; }
+.export-menu.compact > summary {
+  padding: 0 !important; width: 1.8rem !important; height: 1.8rem !important; min-height: 0;
+  justify-content: center; border: 0 !important; background: none !important; box-shadow: none;
+}
+.export-menu.compact > summary:hover { background: var(--sunken) !important; color: var(--text); }
+details.dropdown.export-menu > summary + ul { z-index: 1100; }  /* por encima del botón «…» de Vega (z-index 1000) */

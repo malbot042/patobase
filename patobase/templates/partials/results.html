@@ -1,4 +1,4 @@
-<article class="result-panel"
+<article class="result-panel" data-sql="{{ sql }}"
      x-data="vizPanel({{ config|tojson_attr }}, {{ col_types|tojson_attr }})">
   <script type="application/json" x-ref="data">{{ records|tojson }}</script>
 
@@ -11,10 +11,13 @@
               :aria-pressed="config.type !== 'table'"
               @click="if (config.type === 'table') config.type = lastChart">Gráfico</button>
     </div>
+    <div class="result-tools">
     <small class="muted">
       {% if truncated %}Primeras {{ chart_rows }} filas{% else %}{{ res.rows|length }} fila{{ '' if res.rows|length == 1 else 's' }}{% endif %}
       · {{ "%.0f"|format(res.elapsed_ms) }} ms
     </small>
+    {% include "partials/export_menu.html" %}
+    </div>
   </header>
 
   <div class="viz-controls" x-show="config.type !== 'table'" x-cloak>

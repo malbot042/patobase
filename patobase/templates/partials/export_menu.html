@@ -1,0 +1,14 @@
+{# Menú de exportación. Con `export_url` exporta una pregunta guardada (GET);
+   sin él, el resultado del panel en el que está (POST con su SQL). #}
+<details class="dropdown export-menu{{ ' compact' if compact }}">
+  <summary {% if compact %}class="icon-btn" data-tooltip="Exportar" data-placement="left" aria-label="Exportar"{% else %}role="button" class="secondary outline"{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+    {% if not compact %}Exportar{% endif %}
+  </summary>
+  <ul dir="rtl">
+    {% for fmt, label, hint in [("csv", "CSV", "todas las filas"), ("xlsx", "Excel", "todas las filas"), ("pdf", "PDF", "informe")] %}
+    <li dir="ltr"><a href="#" @click.prevent="patobase.exportData('{{ fmt }}', $el, {{ ('\'' ~ export_url ~ fmt ~ '\'') if export_url else 'null' }})">
+      {{ label }} <small class="muted">· {{ hint }}</small></a></li>
+    {% endfor %}
+  </ul>
+</details>

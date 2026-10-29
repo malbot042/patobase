@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import re
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -292,6 +294,30 @@ class Engine:
             raise QueryError(f"Sentencia no permitida ({stmts[0].type.name}). Solo se admiten consultas de lectura.")
         return stmts[0].query.strip().rstrip(";")
 
+    @contextmanager
+    def stream(self, sql: str, max_rows: int, timeout_s: float | None = None) -> Iterator[RowStream]:
+        """Ejecuta `sql` y entrega un RowStream para leerlo por lotes, con tiempo máximo."""
+        sql = self.validate(sql)
+        timeout_s = timeout_s or self.settings.export_timeout_s
+        cur = self.con.cursor()
+        timer = threading.Timer(timeout_s, cur.interrupt)
+        timer.start()
+        try:
+            try:
+                cur.execute(f"SELECT * FROM ({sql}) AS patobase_export LIMIT {int(max_rows) + 1}")
+            except (duckdb.ParserException, duckdb.BinderException):
+                cur.execute(sql)  # PRAGMA / SHOW / EXPLAIN no se pueden envolver
+            if not cur.description:
+                raise QueryError("La sentencia no devuelve resultados.")
+            yield RowStream([d[0] for d in cur.description], [str(d[1]) for d in cur.description], cur, max_rows)
+        except duckdb.InterruptException as e:
+            raise QueryError(f"La exportación superó el límite de {timeout_s:g} s y se canceló.") from e
+        except duckdb.Error as e:
+            raise QueryError(str(e)) from e
+        finally:
+            timer.cancel()
+            cur.close()
+
     def run(self, sql: str, offset: int = 0, limit: int | None = None) -> QueryResult:
         import time
 
@@ -322,6 +348,28 @@ class Engine:
             offset=offset,
             elapsed_ms=(time.perf_counter() - t0) * 1000,
         )
+
+
+@dataclass
+class RowStream:
+    """Resultado que se lee por lotes (para exportar sin cargarlo todo en memoria)."""
+
+    columns: list[str]
+    types: list[str]
+    _cur: Any
+    max_rows: int
+    count: int = 0
+    truncated: bool = False
+
+    def batches(self, size: int = 10_000) -> Iterator[list[tuple]]:
+        while self.count < self.max_rows:
+            rows = self._cur.fetchmany(min(size, self.max_rows - self.count))
+            if not rows:
+                return
+            self.count += len(rows)
+            yield rows
+        # Se pidió una fila de más para saber si había más resultados
+        self.truncated = bool(self._cur.fetchmany(1))
 
 
 def to_records(res: QueryResult) -> list[dict[str, Any]]:
@@ -361,7 +409,10 @@ TEMPORAL = ("DATE", "TIMESTAMP", "TIME")
 
 
 def vega_type(duck_type: str) -> str:
-    t = duck_type.upper()
+    t = duck_type.upper().strip()
+    # Listas, arrays, structs, maps y uniones no son escalares aunque empiecen por INTEGER, etc.
+    if t.endswith("]") or t.startswith(("STRUCT", "MAP", "UNION")):
+        return "nominal"
     if t.startswith(NUMERIC):
         return "quantitative"
     if t.startswith(TEMPORAL):

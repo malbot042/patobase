@@ -20,6 +20,10 @@ class Settings:
     page_size: int = int(os.getenv("PATOBASE_PAGE_SIZE", "100"))
     chart_rows: int = int(os.getenv("PATOBASE_CHART_ROWS", "2000"))
     timeout_s: float = float(os.getenv("PATOBASE_TIMEOUT", "30"))
+    # Exportaciones: filas máximas (CSV/Excel), filas en PDF y tiempo máximo
+    export_rows: int = int(os.getenv("PATOBASE_EXPORT_ROWS", "1000000"))
+    pdf_rows: int = int(os.getenv("PATOBASE_PDF_ROWS", "2000"))
+    export_timeout_s: float = float(os.getenv("PATOBASE_EXPORT_TIMEOUT", "300"))
 
 
 settings = Settings()
