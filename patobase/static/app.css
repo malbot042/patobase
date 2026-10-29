@@ -87,7 +87,7 @@ main.workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); fle
 .link-btn { color: var(--pico-primary); font-size: 0.75rem; opacity: 0; }
 .schema-table > summary:hover .link-btn { opacity: 1; }
 .type { font-size: 0.7rem; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
-.type-quantitative { color: #2f6fdb; }
+.type-quantitative { color: var(--cm-number); }
 .type-temporal { color: var(--pico-ins-color); }
 .icon-btn { width: 1.8rem; height: 1.8rem; display: inline-grid; place-items: center; border-radius: 0.3rem; color: var(--muted); }
 .icon-btn:hover { background: var(--sunken); color: var(--text); }
@@ -117,18 +117,21 @@ button.danger { --pico-color: var(--danger); --pico-border-color: var(--danger);
 .sql-box .CodeMirror-linenumber { color: var(--muted); }
 .sql-box .CodeMirror-cursor { border-left-color: var(--text); }
 .sql-box .CodeMirror-selected, .sql-box .CodeMirror-focused .CodeMirror-selected { background: var(--pico-primary-focus); }
-.cm-s-default .cm-keyword { color: #a3488c; font-weight: 600; }
-.cm-s-default .cm-string { color: #2a8a5f; }
-.cm-s-default .cm-number { color: #2f6fdb; }
+.cm-s-default .cm-keyword { font-weight: 600; }
 .cm-s-default .cm-comment { color: var(--muted); font-style: italic; }
-.cm-s-default .cm-builtin, .cm-s-default .cm-atom { color: #b06f00; }
+.cm-s-default .cm-keyword { color: var(--cm-keyword); }
+.cm-s-default .cm-string { color: var(--cm-string); }
+.cm-s-default .cm-number { color: var(--cm-number); }
+.cm-s-default .cm-builtin, .cm-s-default .cm-atom { color: var(--cm-builtin); }
+.cm-s-default .cm-variable-2, .cm-s-default .cm-variable-3 { color: var(--cm-number); }
+
+/* Colores del editor SQL y de tipos numéricos para cada tema.
+   Sin elección explícita se sigue al sistema; data-theme la fuerza. */
+:root { --cm-keyword: #a3488c; --cm-string: #2a8a5f; --cm-number: #2f6fdb; --cm-builtin: #b06f00; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cm-s-default .cm-keyword { color: #e28ccb; }
-  :root:not([data-theme="light"]) .cm-s-default .cm-string { color: #7fd3a8; }
-  :root:not([data-theme="light"]) .cm-s-default .cm-number { color: #8db4ff; }
-  :root:not([data-theme="light"]) .cm-s-default .cm-builtin,
-  :root:not([data-theme="light"]) .cm-s-default .cm-atom { color: #ffbf4d; }
+  :root:not([data-theme="light"]) { --cm-keyword: #e28ccb; --cm-string: #7fd3a8; --cm-number: #8db4ff; --cm-builtin: #ffbf4d; }
 }
+:root[data-theme="dark"] { --cm-keyword: #e28ccb; --cm-string: #7fd3a8; --cm-number: #8db4ff; --cm-builtin: #ffbf4d; }
 .CodeMirror-hints { background: var(--pico-dropdown-background-color); border-color: var(--line); font-family: var(--mono); }
 .CodeMirror-hint { color: var(--text); }
 li.CodeMirror-hint-active { background: var(--pico-primary-background); color: var(--pico-primary-inverse); }
@@ -276,3 +279,12 @@ nav[aria-label="breadcrumb"] { margin-bottom: 0.5rem; }
   .form-grid { grid-template-columns: 1fr; }
 }
 .sidebar details[open] > summary { margin-bottom: 0; }
+
+/* ------------------------------------------------------- selector de tema */
+.theme-switch { display: inline-flex; width: auto; margin: 0; }
+.theme-switch button {
+  padding: 0.25rem 0.6rem; font-size: 0.8rem; line-height: 1.2;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+}
+.theme-switch svg { width: 0.95rem; height: 0.95rem; }
+@media (max-width: 860px) { .theme-switch .lbl { display: none; } }

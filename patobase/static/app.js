@@ -208,11 +208,41 @@
   });
 
   // Al cambiar el tema del sistema, redibujar con los colores nuevos
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  function redrawCharts() {
     document.querySelectorAll("[x-data]").forEach((el) => {
       const d = window.Alpine && Alpine.$data(el);
       if (d && typeof d.draw === "function") d.draw();
     });
+  }
+
+  const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+  // Sin elección explícita, el tema sigue al sistema: si este cambia, se redibuja
+  darkQuery.addEventListener("change", () => {
+    if (!document.documentElement.dataset.theme) {
+      redrawCharts();
+      window.dispatchEvent(new CustomEvent("patobase:theme"));
+    }
+  });
+
+  const THEME_KEY = "patobase-theme";
+  const currentTheme = () =>
+    document.documentElement.dataset.theme || (darkQuery.matches ? "dark" : "light");
+
+  document.addEventListener("alpine:init", () => {
+    // Selector claro / oscuro de la barra superior; la elección se guarda en el navegador
+    Alpine.data("themeSwitch", () => ({
+      theme: currentTheme(),
+      init() {
+        window.addEventListener("patobase:theme", () => (this.theme = currentTheme()));
+      },
+      set(t) {
+        document.documentElement.dataset.theme = t;
+        document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", t);
+        try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+        this.theme = t;
+        redrawCharts();
+      },
+    }));
   });
 
   document.addEventListener("DOMContentLoaded", setupEditor);
