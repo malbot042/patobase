@@ -1,0 +1,32 @@
+<div class="table-wrap">
+  <table class="grid">
+    <thead>
+      <tr>
+        {% for c in res.columns %}
+        <th class="{{ 'num' if res.types[loop.index0]|vega_type == 'quantitative' }}" title="{{ res.types[loop.index0] }}">{{ c }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in page %}
+      <tr>
+        {% for v in row %}
+        {% if v is none %}<td class="null">null</td>
+        {% elif res.types[loop.index0]|vega_type == 'quantitative' %}<td class="num">{{ ("{:,.2f}".format(v) if v is float else "{:,}".format(v)) if v is number else v }}</td>
+        {% else %}<td>{{ v }}</td>{% endif %}
+        {% endfor %}
+      </tr>
+      {% else %}
+      <tr><td class="muted" colspan="{{ res.columns|length or 1 }}">Sin filas.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if res.offset > 0 or has_more %}
+<form class="pager" hx-post="/query/page" hx-target="#table-area" hx-swap="innerHTML">
+  <input type="hidden" name="sql" value="{{ sql }}">
+  <span class="muted small">Filas {{ res.offset + 1 }}–{{ res.offset + page|length }}</span>
+  <button class="btn small" name="offset" value="{{ [res.offset - page_size, 0]|max }}" {% if res.offset == 0 %}disabled{% endif %}>‹ Anterior</button>
+  <button class="btn small" name="offset" value="{{ res.offset + page_size }}" {% if not has_more %}disabled{% endif %}>Siguiente ›</button>
+</form>
+{% endif %}

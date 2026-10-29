@@ -1,0 +1,10 @@
+{% if dashboards %}
+<select name="dashboard_id" aria-label="Añadir a dashboard"
+        hx-post="/cards" hx-include="#qid" hx-target="#toast" hx-trigger="change"
+        hx-on::after-request="this.value=''">
+  <option value="">Añadir a dashboard…</option>
+  {% for d in dashboards %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+</select>
+{% else %}
+<a href="/dashboards" class="muted small">Crea un dashboard para añadirla</a>
+{% endif %}

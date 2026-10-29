@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ question.name if question else "Nueva consulta" }}{% endblock %}
+{% block head %}
+  <script src="{{ url_for('static', path='vendor/codemirror/codemirror.js') }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/codemirror/sql.js') }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/codemirror/matchbrackets.js') }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/codemirror/show-hint.js') }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/codemirror/sql-hint.js') }}" defer></script>
+{% endblock %}
+{% block main_class %}workspace{% endblock %}
+{% block content %}
+<aside class="sidebar" x-data="{ filter: '' }">
+  <div class="sidebar-head">
+    <h2>Datos</h2>
+    <button class="icon-btn" title="Recargar esquema"
+            hx-get="/schema" hx-target="#schema-tree" hx-swap="innerHTML">↻</button>
+  </div>
+  <input type="search" class="filter" placeholder="Filtrar tablas…" x-model="filter">
+  <div id="schema-tree" hx-get="/schema" hx-trigger="load" hx-swap="innerHTML">
+    <p class="muted small">Cargando esquema…</p>
+  </div>
+</aside>
+
+<section class="editor-pane">
+  <form id="save-form" class="question-bar" data-with-sql
+        hx-post="/questions" hx-target="#toast" hx-swap="innerHTML">
+    <input type="hidden" name="id" id="qid" value="{{ question.id if question else '' }}">
+    <input type="text" name="name" class="title-input" placeholder="Pregunta sin título"
+           value="{{ question.name if question else '' }}" aria-label="Nombre de la pregunta">
+    <div class="bar-actions">
+      <div id="add-to-dash" class="add-to-dash" {% if not question %}hidden{% endif %}>
+        {% include "partials/add_to_dash.html" %}
+      </div>
+      <button type="submit" class="btn">Guardar</button>
+    </div>
+  </form>
+
+  <form id="run-form" class="sql-box" data-with-sql
+        hx-post="/query/run" hx-target="#results" hx-swap="innerHTML"
+        hx-indicator="#run-indicator" hx-disabled-elt="#run-btn"
+        {% if question %}hx-trigger="submit, load"{% endif %}>
+    <textarea id="sql-editor" name="sql_src">{{ sql }}</textarea>
+    {% if question %}
+      <script type="application/json" id="initial-viz">{{ question.viz | tojson }}</script>
+    {% endif %}
+    <div class="sql-actions">
+      <span class="muted small">Ctrl/⌘ + Enter para ejecutar · Ctrl + Espacio autocompleta</span>
+      <span id="run-indicator" class="htmx-indicator spinner" aria-label="Ejecutando"></span>
+      <button id="run-btn" type="submit" class="btn primary">Ejecutar</button>
+    </div>
+  </form>
+
+  <div id="results" class="results">
+    <div class="empty">
+      <p>Escribe una consulta y pulsa <strong>Ejecutar</strong>.</p>
+      <p class="muted small">Las tablas de la izquierda se pueden insertar en el editor con un clic.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

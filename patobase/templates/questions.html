@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Preguntas{% endblock %}
+{% block content %}
+<div class="page-head" x-data>
+  <h1>Preguntas guardadas</h1>
+  <a href="/" class="btn primary">Nueva consulta</a>
+</div>
+{% if questions %}
+<ul class="list">
+  {% for q in questions %}
+  <li class="list-item" id="q-{{ q.id }}">
+    <div class="list-main">
+      <a href="/?q={{ q.id }}" class="list-title">{{ q.name }}</a>
+      <code class="sql-snippet">{{ q.sql|replace("\n", " ")|truncate(140) }}</code>
+    </div>
+    <span class="badge">{{ {"table": "Tabla", "bar": "Barras", "line": "Líneas", "area": "Área", "point": "Dispersión", "arc": "Sectores"}.get(q.viz.get("type", "table"), "Tabla") }}</span>
+    <span class="muted small">{{ q.updated_at[:16] }}</span>
+    <button class="icon-btn danger" title="Borrar"
+            hx-post="/questions/{{ q.id }}/delete" hx-target="#q-{{ q.id }}" hx-swap="outerHTML"
+            hx-confirm="¿Borrar «{{ q.name }}»? También desaparecerá de los dashboards.">✕</button>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty"><p>Aún no has guardado ninguna pregunta.</p></div>
+{% endif %}
+{% endblock %}

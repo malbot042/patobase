@@ -1,0 +1,30 @@
+{% if not schema %}
+<p class="muted small">No hay fuentes. Ejecuta <code>python scripts/seed.py</code> o copia ficheros .parquet / .csv / .duckdb en la carpeta de datos.</p>
+{% endif %}
+{% for prefix, tables in schema.items() %}
+<details class="schema-group" open>
+  <summary>{{ prefix }}</summary>
+  <ul>
+    {% for tbl, cols in tables.items() %}
+    {% set full = (prefix ~ "." ~ tbl) %}
+    <li x-show="!filter || '{{ full|lower }}'.includes(filter.toLowerCase())">
+      <details class="schema-table">
+        <summary>
+          <span class="tbl-name">{{ tbl }}</span>
+          <button type="button" class="link-btn small" title="SELECT * FROM {{ full }}"
+                  @click.prevent="patobase.selectFrom('{{ full }}')">ver</button>
+        </summary>
+        <ul class="cols">
+          {% for col, typ in cols %}
+          <li>
+            <button type="button" class="col-btn" @click="patobase.insert('{{ col }}')">{{ col }}</button>
+            <span class="type type-{{ typ|vega_type }}">{{ typ|lower }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endfor %}

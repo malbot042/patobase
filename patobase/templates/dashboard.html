@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ d.name }}{% endblock %}
+{% block content %}
+<div class="page-head" x-data="dashControls()">
+  <div>
+    <h1>{{ d.name }}</h1>
+    {% if d.description %}<p class="muted">{{ d.description }}</p>{% endif %}
+  </div>
+  <div class="head-actions">
+    <label class="small muted">Refrescar
+      <select x-model.number="every" @change="schedule()">
+        <option value="0">Manual</option>
+        <option value="30">Cada 30 s</option>
+        <option value="60">Cada minuto</option>
+        <option value="300">Cada 5 min</option>
+      </select>
+    </label>
+    <button type="button" class="btn" @click="refresh()">↻ Refrescar</button>
+    <button type="button" class="btn" :class="{ primary: $store.dash.editing }"
+            @click="$store.dash.editing = !$store.dash.editing"
+            x-text="$store.dash.editing ? 'Listo' : 'Editar'"></button>
+  </div>
+</div>
+
+<div class="dash-editbar" x-data x-show="$store.dash.editing" x-cloak>
+  {% if questions %}
+  <form class="inline-form" hx-post="/dashboards/{{ d.id }}/cards" hx-target="#dash-grid" hx-swap="innerHTML">
+    <select name="question_id" required aria-label="Pregunta">
+      <option value="">Elige una pregunta…</option>
+      {% for q in questions %}<option value="{{ q.id }}">{{ q.name }}</option>{% endfor %}
+    </select>
+    <select name="width" aria-label="Anchura">
+      <option value="1">Media anchura</option>
+      <option value="2">Anchura completa</option>
+    </select>
+    <button class="btn primary">Añadir</button>
+  </form>
+  {% else %}
+  <p class="muted small">Aún no hay preguntas guardadas. <a href="/">Crea una</a>.</p>
+  {% endif %}
+  <button type="button" class="btn danger" hx-post="/dashboards/{{ d.id }}/delete"
+          hx-confirm="¿Borrar el dashboard «{{ d.name }}»? Las preguntas no se borran.">Borrar dashboard</button>
+</div>
+
+<section id="dash-grid" class="dash-grid">
+  {% include "partials/dash_grid.html" %}
+</section>
+{% endblock %}

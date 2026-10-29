@@ -1,0 +1,61 @@
+<div class="result-panel"
+     x-data="vizPanel({{ config|tojson_attr }}, {{ col_types|tojson_attr }})">
+  <script type="application/json" x-ref="data">{{ records|tojson }}</script>
+
+  <div class="result-head">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" :class="{ active: config.type === 'table' }"
+              @click="config.type = 'table'">Tabla</button>
+      <button type="button" role="tab" :class="{ active: config.type !== 'table' }"
+              @click="if (config.type === 'table') config.type = lastChart">Gráfico</button>
+    </div>
+    <div class="meta muted small">
+      {% if truncated %}Primeras {{ chart_rows }} filas{% else %}{{ res.rows|length }} fila{{ '' if res.rows|length == 1 else 's' }}{% endif %}
+      · {{ "%.0f"|format(res.elapsed_ms) }} ms
+    </div>
+  </div>
+
+  <div class="viz-controls" x-show="config.type !== 'table'" x-cloak>
+    <label>Tipo
+      <select x-model="config.type">
+        <option value="bar">Barras</option>
+        <option value="line">Líneas</option>
+        <option value="area">Área</option>
+        <option value="point">Dispersión</option>
+        <option value="arc">Sectores</option>
+      </select>
+    </label>
+    <label><span x-text="config.type === 'arc' ? 'Categoría' : 'Eje X'"></span>
+      <select x-model="config.x">
+        <template x-for="c in columns" :key="c"><option :value="c" x-text="c" :selected="c === config.x"></option></template>
+      </select>
+    </label>
+    <label><span x-text="config.type === 'arc' ? 'Valor' : 'Eje Y'"></span>
+      <select x-model="config.y">
+        <template x-for="c in columns" :key="c"><option :value="c" x-text="c" :selected="c === config.y"></option></template>
+      </select>
+    </label>
+    <label>Agregación
+      <select x-model="config.agg">
+        <option value="">Ninguna</option>
+        <option value="sum">Suma</option>
+        <option value="mean">Media</option>
+        <option value="count">Recuento</option>
+        <option value="max">Máximo</option>
+        <option value="min">Mínimo</option>
+      </select>
+    </label>
+    <label x-show="config.type !== 'arc'">Color
+      <select x-model="config.color">
+        <option value="">—</option>
+        <template x-for="c in columns" :key="c"><option :value="c" x-text="c" :selected="c === config.color"></option></template>
+      </select>
+    </label>
+  </div>
+
+  <div class="chart" x-ref="chart" x-show="config.type !== 'table'" x-cloak></div>
+
+  <div id="table-area" x-show="config.type === 'table'">
+    {% include "partials/table.html" %}
+  </div>
+</div>

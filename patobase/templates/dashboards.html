@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Dashboards{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Dashboards</h1>
+  <form class="inline-form" hx-post="/dashboards">
+    <input type="text" name="name" placeholder="Nombre del nuevo dashboard" required>
+    <button class="btn primary">Crear</button>
+  </form>
+</div>
+{% if dashboards %}
+<ul class="list">
+  {% for d in dashboards %}
+  <li class="list-item">
+    <a href="/dashboards/{{ d.id }}" class="list-title">{{ d.name }}</a>
+    {% if d.description %}<span class="muted small">{{ d.description }}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty"><p>Todavía no hay dashboards.</p></div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,2 @@
+<div class="toast {{ kind or 'ok' }}" x-data="{ show: true }" x-show="show"
+     x-init="setTimeout(() => show = false, 3500)" x-transition.opacity>{{ message }}</div>

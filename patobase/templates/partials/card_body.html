@@ -1,0 +1,11 @@
+{% if config.type == 'table' %}
+  {% with sql=q.sql, has_more=false, page_size=50 %}
+  <div class="card-table">{% include "partials/table.html" %}</div>
+  {% endwith %}
+  {% if res.rows|length > 50 %}<p class="muted small card-foot">Mostrando 50 de {{ res.rows|length }}{% if res.has_more %}+{% endif %} filas · <a href="/?q={{ q.id }}">abrir</a></p>{% endif %}
+{% else %}
+  <div x-data="vizChart({{ config|tojson_attr }}, {{ col_types|tojson_attr }})" class="card-chart">
+    <script type="application/json" x-ref="data">{{ records|tojson }}</script>
+    <div class="chart" x-ref="chart"></div>
+  </div>
+{% endif %}

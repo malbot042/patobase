@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Datos locales y metadatos (se regeneran con scripts/seed.py)
+data/
+*.sqlite
+*.duckdb.wal
+.env
