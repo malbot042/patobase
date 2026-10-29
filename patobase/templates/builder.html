@@ -1,22 +1,9 @@
 {% extends "base.html" %}
+{% from "partials/picker.html" import picker %}
 {% block title %}{{ question.name if question else "Nueva pregunta visual" }}{% endblock %}
 {% block main_class %}container builder-page{% endblock %}
 {% block content %}
-{# Tablas agrupadas por origen, para los <select> de datos y uniones #}
-{% set groups = {} %}
-{% for key, t in catalog.tables.items() %}{% set _ = groups.setdefault(t.prefix, []).append((key, t.name)) %}{% endfor %}
-{% macro table_options() %}
-  {% for prefix, items in groups.items() if prefix != 'preguntas' %}
-  <optgroup label="{{ prefix }}">
-    {% for key, name in items %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
-  </optgroup>
-  {% endfor %}
-  {% if groups.preguntas %}
-  <optgroup label="Preguntas guardadas">
-    {% for key, name in groups.preguntas %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
-  </optgroup>
-  {% endif %}
-{% endmacro %}
+
 
 <div x-data="builder({{ spec|tojson_attr }}, {{ catalog|tojson_attr }})"
      @keydown.ctrl.enter.window="run()" @keydown.meta.enter.window="run()"
@@ -30,10 +17,7 @@
     <section class="nb-step step-data">
       <h6>Datos</h6>
       <div class="nb-body">
-        <select x-model="spec.source" @change="resetFromSource()" aria-label="Datos de partida">
-          <option value="">Elige una tabla o una pregunta guardada…</option>
-          {{ table_options() }}
-        </select>
+        {{ picker("spec.source", "tableOptions()", "Elige una tabla o una pregunta guardada…", "resetFromSource()", "Datos de partida", wide=True) }}
       </div>
     </section>
 
@@ -48,22 +32,11 @@
                 <option value="left">Unión izquierda</option>
                 <option value="inner">Unión interna</option>
               </select>
-              <select x-model="j.table" @change="trimAfterJoin(i); guessJoin(j, i)" aria-label="Tabla a unir">
-                <option value="">Tabla…</option>
-                {{ table_options() }}
-              </select>
+              {{ picker("j.table", "tableOptions()", "Tabla…", "trimAfterJoin(i); guessJoin(j, i)", "Tabla a unir") }}
               <span class="nb-word">donde</span>
-              <select x-model="j.left" aria-label="Columna de la izquierda">
-                <template x-for="c in columnsUpTo(i)" :key="c.ref">
-                  <option :value="c.ref" x-text="c.label" :selected="c.ref === j.left"></option>
-                </template>
-              </select>
+              {{ picker("j.left", "colOptions(columnsUpTo(i))", "Columna…", "", "Columna de la izquierda") }}
               <span class="nb-word">=</span>
-              <select x-model="j.right" aria-label="Columna de la derecha">
-                <template x-for="c in tableColumns(j.table)" :key="c[0]">
-                  <option :value="c[0]" x-text="c[0]" :selected="c[0] === j.right"></option>
-                </template>
-              </select>
+              {{ picker("j.right", "rightOptions(j)", "Columna…", "", "Columna de la derecha") }}
               <button type="button" class="icon-btn danger" @click="removeJoin(i)" aria-label="Quitar unión">✕</button>
             </div>
           </template>
@@ -74,11 +47,7 @@
           <h6>Filtrar</h6>
           <template x-for="(f, i) in spec.filters" :key="i">
             <div class="nb-row">
-              <select x-model="f.col" @change="f.op = opsFor(f.col)[0]; f.value = ''; f.value2 = ''" aria-label="Columna">
-                <template x-for="c in allColumns()" :key="c.ref">
-                  <option :value="c.ref" x-text="c.label" :selected="c.ref === f.col"></option>
-                </template>
-              </select>
+              {{ picker("f.col", "colOptions(allColumns())", "Columna…", "f.op = opsFor(f.col)[0]; f.value = ''; f.value2 = ''", "Columna a filtrar") }}
               <select x-model="f.op" class="w-auto" aria-label="Condición">
                 <template x-for="op in opsFor(f.col)" :key="op">
                   <option :value="op" x-text="catalog.ops[op]" :selected="op === f.op"></option>
@@ -111,11 +80,7 @@
                     </template>
                   </select>
                   <template x-if="m.agg !== 'count'">
-                    <select x-model="m.col" aria-label="Columna de la métrica">
-                      <template x-for="c in metricColumns(m.agg)" :key="c.ref">
-                        <option :value="c.ref" x-text="c.label" :selected="c.ref === m.col"></option>
-                      </template>
-                    </select>
+                    {{ picker("m.col", "colOptions(metricColumns(m.agg))", "Columna…", "", "Columna de la métrica") }}
                   </template>
                   <button type="button" class="icon-btn danger" @click="spec.metrics.splice(i, 1)" aria-label="Quitar métrica">✕</button>
                 </div>
@@ -127,11 +92,7 @@
               <div>
                 <template x-for="(g, i) in spec.groups" :key="i">
                   <div class="nb-row">
-                    <select x-model="g.col" @change="g.bucket = isTemporal(g.col) ? 'month' : ''" aria-label="Agrupar por">
-                      <template x-for="c in allColumns()" :key="c.ref">
-                        <option :value="c.ref" x-text="c.label" :selected="c.ref === g.col"></option>
-                      </template>
-                    </select>
+                    {{ picker("g.col", "colOptions(allColumns())", "Columna…", "g.bucket = isTemporal(g.col) ? 'month' : ''", "Agrupar por") }}
                     <template x-if="isTemporal(g.col)">
                       <select x-model="g.bucket" class="w-auto" aria-label="Granularidad">
                         <option value="">fecha exacta</option>
@@ -168,11 +129,7 @@
           <h6>Ordenar y limitar</h6>
           <template x-for="(o, i) in spec.sort" :key="i">
             <div class="nb-row">
-              <select x-model="o.by" aria-label="Ordenar por">
-                <template x-for="c in compiled.columns" :key="c.name">
-                  <option :value="c.name" x-text="c.name" :selected="c.name === o.by"></option>
-                </template>
-              </select>
+              {{ picker("o.by", "outputOptions()", "Columna…", "", "Ordenar por") }}
               <select x-model="o.dir" class="w-auto" aria-label="Sentido">
                 <option value="asc">ascendente</option>
                 <option value="desc">descendente</option>

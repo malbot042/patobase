@@ -1,0 +1,45 @@
+{# Selector con buscador para tablas y columnas del editor visual.
+
+   picker(model, options, placeholder, on_pick="", label="")
+   - model:    expresión Alpine que se lee/escribe (x-model), p. ej. "f.col"
+   - options:  expresión que devuelve [{value, label, group?, type?}]
+   - on_pick:  código a ejecutar tras elegir (ya con el modelo actualizado)
+#}
+{% macro picker(model, options, placeholder="Elige…", on_pick="", label="", wide=False) -%}
+<div class="picker{{ ' wide' if wide }}" x-data="picker(() => {{ options }})" x-modelable="value" x-model="{{ model }}"
+     @click.outside="close()" @keydown.escape.stop="close(true)"
+     {% if on_pick %}@picked="{{ on_pick }}"{% endif %}>
+  <button type="button" class="picker-btn" @click="toggle()" :aria-expanded="open" aria-haspopup="listbox"
+          aria-label="{{ label or placeholder }}" @keydown.down.prevent="openAndFocus()" @keydown="typeAhead($event)">
+    <span class="picker-type" x-show="current() && current().type" x-text="typeTag(current() && current().type)"
+          :class="'t-' + (current() && current().type)"></span>
+    <span class="picker-value" :class="{ placeholder: !current() }">
+      <small class="picker-in" x-show="current() && current().group" x-text="current() && current().group"></small>
+      <span x-text="current() ? current().label : '{{ placeholder }}'"></span>
+    </span>
+    <span class="picker-caret" aria-hidden="true"></span>
+  </button>
+  <div class="picker-pop" x-show="open" x-cloak>
+    <input type="search" x-ref="q" x-model="q" placeholder="Buscar…" autocomplete="off" aria-label="Buscar"
+           @input="active = 0"
+           @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)"
+           @keydown.enter.prevent="choose(matches()[active])" @keydown.tab="close()">
+    <ul role="listbox" x-ref="list">
+      <template x-for="row in rows()" :key="row.key">
+        <li :role="row.header ? 'presentation' : 'option'" :class="{ 'picker-group': row.header, active: !row.header && row.idx === active, selected: !row.header && row.o.value === value }"
+            :aria-selected="!row.header && row.o.value === value"
+            @mousedown.prevent="!row.header && choose(row.o)" @mousemove="!row.header && (active = row.idx)">
+          <template x-if="row.header"><span x-text="row.label"></span></template>
+          <template x-if="!row.header">
+            <span class="picker-opt">
+              <span class="picker-type" x-show="row.o.type" x-text="typeTag(row.o.type)" :class="'t-' + row.o.type"></span>
+              <span x-html="highlight(row.o.label)"></span>
+            </span>
+          </template>
+        </li>
+      </template>
+      <li class="picker-empty" x-show="!matches().length">Sin resultados para «<span x-text="q"></span>»</li>
+    </ul>
+  </div>
+</div>
+{%- endmacro %}

@@ -21,7 +21,7 @@ el estado de la interfaz.
 
 ## Editor visual
 
-**Nueva consulta** abre el editor visual. Los pasos se añaden con los botones «＋»:
+**Nueva consulta** abre el editor visual. Los pasos se añaden con los botones «＋»; las tablas y columnas se eligen con un **selector con buscador** (sin distinguir acentos, con varias palabras —«clie ciu» encuentra *clientes · ciudad*— y manejable con teclado: ↑ ↓, Enter, Esc, o empezar a escribir con el foco en el selector):
 
 | Paso | Qué hace |
 |---|---|

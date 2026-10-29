@@ -273,6 +273,100 @@
   });
 
   // Al cambiar el tema del sistema, redibujar con los colores nuevos
+  // ------------------------------------------- selector con buscador (picker)
+  const fold = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const escapeHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const TYPE_TAGS = { quantitative: "#", temporal: "◷", nominal: "Aa" };
+
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("picker", (optionsFn) => ({
+      value: "",
+      open: false,
+      q: "",
+      active: 0,
+      options() { try { return optionsFn() || []; } catch (e) { return []; } },
+      current() { return this.options().find((o) => o.value === this.value) || null; },
+      typeTag(t) { return TYPE_TAGS[t] || ""; },
+      matches() {
+        // Todas las palabras deben aparecer en «grupo + etiqueta», sin distinguir acentos
+        const words = fold(this.q).split(/\s+/).filter(Boolean);
+        const opts = this.options();
+        if (!words.length) return opts;
+        return opts.filter((o) => { const hay = fold(`${o.group || ""} ${o.label}`); return words.every((w) => hay.includes(w)); });
+      },
+      rows() {
+        const rows = [];
+        let group = null;
+        this.matches().forEach((o, idx) => {
+          if (o.group && o.group !== group) { group = o.group; rows.push({ header: true, label: group, key: `h:${group}` }); }
+          rows.push({ header: false, o, idx, key: `o:${o.value}` });
+        });
+        return rows;
+      },
+      highlight(label) {
+        const words = fold(this.q).split(/\s+/).filter(Boolean);
+        if (!words.length) return escapeHtml(label);
+        // Marca la primera aparición de cada palabra respetando acentos del original
+        const folded = fold(label);
+        const marks = new Array(label.length).fill(false);
+        words.forEach((w) => { const i = folded.indexOf(w); if (i >= 0) for (let k = i; k < i + w.length; k++) marks[k] = true; });
+        let html = "", on = false;
+        [...label].forEach((ch, i) => {
+          if (marks[i] && !on) { html += "<mark>"; on = true; }
+          if (!marks[i] && on) { html += "</mark>"; on = false; }
+          html += escapeHtml(ch);
+        });
+        return on ? html + "</mark>" : html;
+      },
+      toggle() { this.open ? this.close() : this.openAndFocus(); },
+      openAndFocus(initial = "") {
+        this.open = true;
+        this.q = initial;
+        const sel = this.matches().findIndex((o) => o.value === this.value);
+        this.active = initial ? 0 : Math.max(sel, 0);
+        // Se muestra y se enfoca ya, sin esperar al siguiente ciclo de Alpine:
+        // si no, las primeras teclas que escribe el usuario se pierden
+        const pop = this.$root.querySelector(".picker-pop");
+        pop.style.display = "";
+        this.$refs.q.value = initial;
+        this.$refs.q.focus();
+        this.$nextTick(() => this.scrollToActive());
+      },
+      typeAhead(e) {
+        // Con el foco en el selector, escribir abre el buscador con esa letra
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          this.openAndFocus(e.key);
+        } else if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          this.openAndFocus();
+        }
+      },
+      close(refocus = false) {
+        if (!this.open) return;
+        this.open = false;
+        if (refocus) this.$root.querySelector(".picker-btn").focus();
+      },
+      move(d) {
+        const n = this.matches().length;
+        if (!n) return;
+        this.active = (this.active + d + n) % n;
+        this.$nextTick(() => this.scrollToActive());
+      },
+      scrollToActive() {
+        const el = this.$refs.list && this.$refs.list.querySelector("li.active");
+        if (el) el.scrollIntoView({ block: "nearest" });
+      },
+      choose(o) {
+        if (!o) return;
+        const changed = o.value !== this.value;
+        this.value = o.value;
+        this.close(true);
+        if (changed) this.$nextTick(() => this.$dispatch("picked", o.value));
+      },
+    }));
+  });
+
   // ------------------------------------------------------- editor visual
   const emptySpec = (source = "") => ({
     source, joins: [], filters: [], metrics: [], groups: [], columns: [], sort: [], limit: null,
@@ -311,10 +405,33 @@
       },
       columnsOf(key, idx) {
         const multi = this.spec.joins.length > 0;
+        const table = this.tableName(key);
         return this.tableColumns(key).map(([name, type]) => ({
-          ref: `t${idx}.${name}`, type,
-          label: multi ? `${this.tableName(key)} · ${name}` : name,
+          ref: `t${idx}.${name}`, type, name, table,
+          label: multi ? `${table} · ${name}` : name,
         }));
+      },
+
+      // ---- opciones para los selectores con buscador
+      tableOptions() {
+        const out = Object.entries(this.catalog.tables).map(([key, t]) => ({
+          value: key, label: t.name,
+          group: t.prefix === "preguntas" ? "Preguntas guardadas" : t.prefix,
+        }));
+        // Las preguntas guardadas, al final
+        return out.sort((a, b) =>
+          (a.group === "Preguntas guardadas") - (b.group === "Preguntas guardadas") ||
+          a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+      },
+      colOptions(cols) {
+        const multi = this.spec.joins.length > 0;
+        return cols.map((c) => ({ value: c.ref, label: c.name, type: c.type, group: multi ? c.table : "" }));
+      },
+      rightOptions(j) {
+        return this.tableColumns(j.table).map(([name, type]) => ({ value: name, label: name, type }));
+      },
+      outputOptions() {
+        return this.compiled.columns.map((c) => ({ value: c.name, label: c.name }));
       },
       allColumns() { return this.tables().flatMap((key, idx) => (key ? this.columnsOf(key, idx) : [])); },
       typeOf(ref) { const c = this.allColumns().find((x) => x.ref === ref); return c ? c.type : "nominal"; },
@@ -397,10 +514,18 @@
       async compile() {
         if (!this.spec.source) { this.compiled = { sql: "", columns: [], error: "" }; return; }
         const body = new URLSearchParams({ spec: JSON.stringify(this.spec) });
+        const seq = (this._seq = (this._seq || 0) + 1);
         try {
           const r = await fetch("/builder/compile", { method: "POST", body });
           const data = await r.json();
-          this.compiled = { sql: data.sql || "", columns: data.columns || [], error: data.error || "" };
+          if (seq !== this._seq) return; // llegó tarde: ya hay una petición más reciente
+          // Si hay un error (p. ej. un filtro a medio rellenar) se conservan las últimas
+          // columnas válidas, para poder seguir eligiendo orden mientras tanto
+          this.compiled = {
+            sql: data.sql || "",
+            columns: data.columns || this.compiled.columns,
+            error: data.error || "",
+          };
           // Quita órdenes por columnas que ya no existen en la salida
           const names = new Set(this.compiled.columns.map((c) => c.name));
           if (!data.error && this.spec.sort.some((o) => !names.has(o.by))) {

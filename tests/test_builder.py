@@ -248,3 +248,11 @@ def test_migration_adds_columns_and_slugs(tmp_path):
 def test_compile_spec_module_level_imports():
     # Las funciones importadas al principio del módulo siguen funcionando
     assert callable(compile_spec) and callable(catalog_from_schema) and issubclass(BuildError, Exception)
+
+
+def test_sort_without_column_is_ignored(catalog):
+    """Un orden recién añadido (aún sin columna) no debe bloquear la consulta."""
+    from patobase.builder import compile_spec as cs
+
+    c = cs({"source": "files.ventas", "metrics": [{"agg": "count"}], "sort": [{"by": "", "dir": "desc"}]}, catalog)
+    assert "ORDER BY" not in c.sql

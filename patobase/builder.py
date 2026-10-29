@@ -303,6 +303,8 @@ def compile_spec(spec: dict, catalog: dict[str, Table]) -> Compiled:
     out_names = {c["name"] for c in out_cols}
     for s in spec.get("sort") or []:
         by = s.get("by")
+        if not by:  # orden añadido pero aún sin columna: se ignora
+            continue
         if by not in out_names:
             raise BuildError(f"No se puede ordenar por «{by}»: no está en el resultado.")
         order.append(f"{quote(by)} {'DESC' if s.get('dir') == 'desc' else 'ASC'}")

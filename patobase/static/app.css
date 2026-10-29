@@ -366,3 +366,49 @@ main.builder-page { max-width: 1280px; }
 }
 .export-menu.compact > summary:hover { background: var(--sunken) !important; color: var(--text); }
 details.dropdown.export-menu > summary + ul { z-index: 1100; }  /* por encima del botón «…» de Vega (z-index 1000) */
+
+/* ------------------------------------------- selector con buscador */
+.picker { position: relative; display: inline-block; min-width: 11rem; max-width: 100%; }
+.picker.wide { width: 100%; max-width: 32rem; }
+.picker-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; width: 100%;
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.35rem 0.6rem; font-size: 0.88rem; line-height: 1.35;
+  background: var(--pico-form-element-background-color); color: var(--pico-form-element-color);
+  border: var(--pico-border-width) solid var(--pico-form-element-border-color); border-radius: var(--pico-border-radius);
+}
+.picker-btn:hover { border-color: var(--pico-form-element-active-border-color); }
+.picker-btn:focus-visible, .picker-btn[aria-expanded="true"] {
+  border-color: var(--pico-form-element-focus-color); box-shadow: 0 0 0 3px var(--pico-primary-focus);
+}
+.picker-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-value.placeholder { color: var(--pico-form-element-placeholder-color); }
+.picker-in { color: var(--muted); margin-right: 0.3rem; }
+.picker-in::after { content: " ·"; }
+.picker-caret { width: 0.6rem; height: 0.6rem; flex: none; opacity: 0.6;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.picker-type {
+  flex: none; min-width: 1.4rem; text-align: center; font-size: 0.68rem; font-weight: 700; font-family: var(--mono);
+  border-radius: 0.25rem; padding: 0 0.2rem; background: var(--sunken); color: var(--muted);
+}
+.picker-type.t-quantitative { color: var(--cm-number); }
+.picker-type.t-temporal { color: var(--pico-ins-color); }
+.picker-pop {
+  position: absolute; z-index: 1200; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: min(28rem, 92vw);
+  background: var(--pico-dropdown-background-color); border: 1px solid var(--pico-dropdown-border-color);
+  border-radius: var(--pico-border-radius); box-shadow: var(--pico-dropdown-box-shadow); padding: 0.4rem;
+}
+.picker-pop input[type="search"] { margin: 0 0 0.35rem; width: 100%; min-width: 0; font-size: 0.88rem; padding-block: 0.35rem; }
+.picker-pop ul { list-style: none; margin: 0; padding: 0; max-height: 18rem; overflow-y: auto; }
+.picker-pop li { list-style: none; margin: 0; padding: 0.3rem 0.5rem; border-radius: 0.3rem; cursor: pointer; font-size: 0.88rem; }
+.picker-pop li.active { background: var(--pico-primary-focus); }
+.picker-pop li.selected { font-weight: 600; }
+.picker-pop li.picker-group {
+  cursor: default; padding: 0.45rem 0.5rem 0.15rem; font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); background: none;
+}
+.picker-pop li.picker-empty { cursor: default; color: var(--muted); font-size: 0.82rem; }
+.picker-opt { display: flex; align-items: center; gap: 0.45rem; }
+.picker-pop mark { padding: 0; background: none; color: var(--pico-primary); font-weight: 700; }
+@media (max-width: 860px) { .picker { width: 100%; } }
+.add-to-dash { white-space: nowrap; }
