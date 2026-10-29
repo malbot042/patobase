@@ -229,7 +229,7 @@
     document.documentElement.dataset.theme || (darkQuery.matches ? "dark" : "light");
 
   document.addEventListener("alpine:init", () => {
-    // Selector claro / oscuro de la barra superior; la elección se guarda en el navegador
+    // Botón sol / luna de la barra superior; la elección se guarda en el navegador
     Alpine.data("themeSwitch", () => ({
       theme: currentTheme(),
       init() {
@@ -241,6 +241,9 @@
         try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
         this.theme = t;
         redrawCharts();
+      },
+      toggle() {
+        this.set(this.theme === "dark" ? "light" : "dark");
       },
     }));
   });
