@@ -18,6 +18,17 @@ from .store import Store
 BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=BASE / "templates")
 templates.env.filters["vega_type"] = vega_type
+def fmt_num(v):
+    """Números al estilo español: 1 234 567,89 (espacio fino como separador de miles)."""
+    from decimal import Decimal
+
+    if isinstance(v, bool) or not isinstance(v, (int, float, Decimal)):
+        return v
+    s = f"{v:,.2f}" if isinstance(v, (float, Decimal)) else f"{v:,}"
+    return s.replace(",", "\u2009").replace(".", ",")
+
+
+templates.env.filters["num"] = fmt_num
 templates.env.filters["tojson_attr"] = lambda v: json.dumps(v, ensure_ascii=False, default=str)
 
 

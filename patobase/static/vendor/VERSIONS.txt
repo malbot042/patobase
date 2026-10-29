@@ -4,3 +4,4 @@ codemirror 5.65.21
 vega 5.33.1
 vega-lite 5.23.0
 vega-embed 6.29.0
+@picocss/pico 2.1.1 (pico.amber.min.css)

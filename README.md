@@ -1,10 +1,10 @@
 # patobase
 
-Consultas SQL y dashboards al estilo Metabase, con **DuckDB** como motor y un
+Consultas SQL y dashboards al estilo Metabase, con **DuckDB** como motor, **Pico CSS** para los estilos y un
 frontend sin build: **htmx** para todo lo que va al servidor y **Alpine.js** para
 el estado de la interfaz.
 
-![Stack](https://img.shields.io/badge/stack-FastAPI%20·%20DuckDB%20·%20htmx%20·%20Alpine-d4890b)
+![Stack](https://img.shields.io/badge/stack-FastAPI%20·%20DuckDB%20·%20htmx%20·%20Alpine%20·%20Pico-d4890b)
 
 ## Qué hace
 
@@ -76,6 +76,7 @@ patobase/
   store.py         SQLite: preguntas, dashboards y tarjetas
   main.py          rutas FastAPI (páginas completas y parciales htmx)
   templates/       Jinja2; partials/ son los fragmentos que intercambia htmx
+  static/app.css   layout de la app y ajustes de densidad sobre Pico CSS
   static/app.js    CodeMirror, Vega-Lite y componentes Alpine
   static/vendor/   librerías JS incluidas (sin CDN, funciona offline)
 scripts/seed.py    datos de ejemplo

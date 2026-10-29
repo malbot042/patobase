@@ -1,19 +1,21 @@
-<div class="result-panel"
+<article class="result-panel"
      x-data="vizPanel({{ config|tojson_attr }}, {{ col_types|tojson_attr }})">
   <script type="application/json" x-ref="data">{{ records|tojson }}</script>
 
-  <div class="result-head">
-    <div class="tabs" role="tablist">
-      <button type="button" role="tab" :class="{ active: config.type === 'table' }"
+  <header class="result-head">
+    <div role="group" class="tabs">
+      <button type="button" :class="config.type === 'table' ? '' : 'secondary outline'"
+              :aria-pressed="config.type === 'table'"
               @click="config.type = 'table'">Tabla</button>
-      <button type="button" role="tab" :class="{ active: config.type !== 'table' }"
+      <button type="button" :class="config.type !== 'table' ? '' : 'secondary outline'"
+              :aria-pressed="config.type !== 'table'"
               @click="if (config.type === 'table') config.type = lastChart">Gráfico</button>
     </div>
-    <div class="meta muted small">
+    <small class="muted">
       {% if truncated %}Primeras {{ chart_rows }} filas{% else %}{{ res.rows|length }} fila{{ '' if res.rows|length == 1 else 's' }}{% endif %}
       · {{ "%.0f"|format(res.elapsed_ms) }} ms
-    </div>
-  </div>
+    </small>
+  </header>
 
   <div class="viz-controls" x-show="config.type !== 'table'" x-cloak>
     <label>Tipo
@@ -58,4 +60,4 @@
   <div id="table-area" x-show="config.type === 'table'">
     {% include "partials/table.html" %}
   </div>
-</div>
+</article>

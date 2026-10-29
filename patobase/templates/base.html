@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{% block title %}patobase{% endblock %} · patobase</title>
   <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/pico.amber.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='vendor/codemirror/codemirror.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='vendor/codemirror/show-hint.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
@@ -16,19 +18,26 @@
   <script src="{{ url_for('static', path='app.js') }}" defer></script>
   <script src="{{ url_for('static', path='vendor/alpine.min.js') }}" defer></script>
 </head>
-<body hx-boost="false">
+<body>
+  {% set path = request.url.path %}
   <header class="topbar">
-    <a href="/" class="brand">
-      <img src="{{ url_for('static', path='favicon.svg') }}" alt="" width="22" height="22">
-      <span>patobase</span>
-    </a>
-    <nav>
-      <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Nueva consulta</a>
-      <a href="/questions" class="{% if request.url.path.startswith('/questions') %}active{% endif %}">Preguntas</a>
-      <a href="/dashboards" class="{% if request.url.path.startswith('/dashboards') %}active{% endif %}">Dashboards</a>
+    <nav class="container-fluid">
+      <ul>
+        <li>
+          <a href="/" class="brand">
+            <img src="{{ url_for('static', path='favicon.svg') }}" alt="" width="24" height="24">
+            <strong>patobase</strong>
+          </a>
+        </li>
+      </ul>
+      <ul>
+        <li><a href="/" {% if path == '/' %}aria-current="page"{% endif %}>Nueva consulta</a></li>
+        <li><a href="/questions" {% if path.startswith('/questions') %}aria-current="page"{% endif %}>Preguntas</a></li>
+        <li><a href="/dashboards" {% if path.startswith('/dashboards') %}aria-current="page"{% endif %}>Dashboards</a></li>
+      </ul>
     </nav>
   </header>
-  <main class="{% block main_class %}page{% endblock %}">
+  <main class="{% block main_class %}container{% endblock %}">
     {% block content %}{% endblock %}
   </main>
   <div id="toast" class="toast-area" aria-live="polite"></div>

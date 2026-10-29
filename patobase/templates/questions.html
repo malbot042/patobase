@@ -1,27 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Preguntas{% endblock %}
 {% block content %}
-<div class="page-head" x-data>
-  <h1>Preguntas guardadas</h1>
-  <a href="/" class="btn primary">Nueva consulta</a>
+<div class="page-head">
+  <h2>Preguntas guardadas</h2>
+  <a href="/" role="button">Nueva consulta</a>
 </div>
 {% if questions %}
-<ul class="list">
-  {% for q in questions %}
-  <li class="list-item" id="q-{{ q.id }}">
-    <div class="list-main">
-      <a href="/?q={{ q.id }}" class="list-title">{{ q.name }}</a>
-      <code class="sql-snippet">{{ q.sql|replace("\n", " ")|truncate(140) }}</code>
-    </div>
-    <span class="badge">{{ {"table": "Tabla", "bar": "Barras", "line": "Líneas", "area": "Área", "point": "Dispersión", "arc": "Sectores"}.get(q.viz.get("type", "table"), "Tabla") }}</span>
-    <span class="muted small">{{ q.updated_at[:16] }}</span>
-    <button class="icon-btn danger" title="Borrar"
-            hx-post="/questions/{{ q.id }}/delete" hx-target="#q-{{ q.id }}" hx-swap="outerHTML"
-            hx-confirm="¿Borrar «{{ q.name }}»? También desaparecerá de los dashboards.">✕</button>
-  </li>
-  {% endfor %}
-</ul>
+<div class="overflow-auto">
+  <table class="questions">
+    <thead>
+      <tr><th scope="col">Nombre</th><th scope="col">Visualización</th><th scope="col">Actualizada</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for q in questions %}
+      <tr id="q-{{ q.id }}">
+        <td>
+          <a href="/?q={{ q.id }}"><strong>{{ q.name }}</strong></a><br>
+          <code class="sql-snippet">{{ q.sql|replace("\n", " ")|truncate(110) }}</code>
+        </td>
+        <td><mark>{{ {"table": "Tabla", "bar": "Barras", "line": "Líneas", "area": "Área", "point": "Dispersión", "arc": "Sectores"}.get(q.viz.get("type", "table"), "Tabla") }}</mark></td>
+        <td><small class="muted">{{ q.updated_at[:16] }}</small></td>
+        <td class="actions">
+          <button class="icon-btn danger" data-tooltip="Borrar" data-placement="left"
+                  hx-post="/questions/{{ q.id }}/delete" hx-target="#q-{{ q.id }}" hx-swap="outerHTML"
+                  hx-confirm="¿Borrar «{{ q.name }}»? También desaparecerá de los dashboards.">✕</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
-<div class="empty"><p>Aún no has guardado ninguna pregunta.</p></div>
+<article class="empty"><p>Aún no has guardado ninguna pregunta.</p></article>
 {% endif %}
 {% endblock %}

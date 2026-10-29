@@ -3,10 +3,10 @@
   <header class="card-head">
     <a href="/?q={{ card.question.id }}" class="card-title">{{ card.question.name }}</a>
     <div class="card-actions" x-show="$store.dash.editing" x-cloak>
-      <button type="button" class="icon-btn" title="Cambiar anchura"
+      <button type="button" class="icon-btn" data-tooltip="Cambiar anchura"
               @click="wide = !wide; patobase.post('/cards/{{ card.id }}/width', { width: wide ? 2 : 1 });
                       $nextTick(() => window.dispatchEvent(new Event('resize')))">⇔</button>
-      <button type="button" class="icon-btn danger" title="Quitar del dashboard"
+      <button type="button" class="icon-btn danger" data-tooltip="Quitar"
               hx-post="/cards/{{ card.id }}/delete" hx-target="#card-{{ card.id }}" hx-swap="outerHTML"
               hx-confirm="¿Quitar «{{ card.question.name }}» del dashboard?">✕</button>
     </div>
@@ -15,12 +15,12 @@
        hx-get="/questions/{{ card.question.id }}/card"
        hx-trigger="load, dash-refresh from:body"
        hx-swap="innerHTML">
-    <div class="loading"><span class="spinner"></span></div>
+    <div class="loading" aria-busy="true"></div>
   </div>
 </article>
 {% else %}
-<div class="empty wide">
+<article class="empty wide">
   <p>Este dashboard está vacío.</p>
-  <p class="muted small">Añade preguntas guardadas con el selector de arriba.</p>
-</div>
+  <small class="muted">Pulsa <strong>Editar</strong> y añade preguntas guardadas.</small>
+</article>
 {% endfor %}

@@ -11,13 +11,13 @@
 {% block content %}
 <aside class="sidebar" x-data="{ filter: '' }">
   <div class="sidebar-head">
-    <h2>Datos</h2>
-    <button class="icon-btn" title="Recargar esquema"
+    <h6>Datos</h6>
+    <button class="icon-btn" title="Recargar esquema" data-tooltip="Recargar esquema" data-placement="left"
             hx-get="/schema" hx-target="#schema-tree" hx-swap="innerHTML">↻</button>
   </div>
-  <input type="search" class="filter" placeholder="Filtrar tablas…" x-model="filter">
+  <input type="search" placeholder="Filtrar tablas…" x-model="filter" aria-label="Filtrar tablas">
   <div id="schema-tree" hx-get="/schema" hx-trigger="load" hx-swap="innerHTML">
-    <p class="muted small">Cargando esquema…</p>
+    <p aria-busy="true" class="small">Cargando esquema…</p>
   </div>
 </aside>
 
@@ -31,30 +31,35 @@
       <div id="add-to-dash" class="add-to-dash" {% if not question %}hidden{% endif %}>
         {% include "partials/add_to_dash.html" %}
       </div>
-      <button type="submit" class="btn">Guardar</button>
+      <button type="submit" class="secondary outline">Guardar</button>
     </div>
   </form>
 
-  <form id="run-form" class="sql-box" data-with-sql
+  <form id="run-form" data-with-sql
         hx-post="/query/run" hx-target="#results" hx-swap="innerHTML"
-        hx-indicator="#run-indicator" hx-disabled-elt="#run-btn"
+        hx-disabled-elt="#run-btn"
+        hx-on:htmx:before-request="document.getElementById('run-btn').setAttribute('aria-busy', 'true')"
+        hx-on:htmx:after-request="document.getElementById('run-btn').removeAttribute('aria-busy')"
         {% if question %}hx-trigger="submit, load"{% endif %}>
-    <textarea id="sql-editor" name="sql_src">{{ sql }}</textarea>
-    {% if question %}
-      <script type="application/json" id="initial-viz">{{ question.viz | tojson }}</script>
-    {% endif %}
-    <div class="sql-actions">
-      <span class="muted small">Ctrl/⌘ + Enter para ejecutar · Ctrl + Espacio autocompleta</span>
-      <span id="run-indicator" class="htmx-indicator spinner" aria-label="Ejecutando"></span>
-      <button id="run-btn" type="submit" class="btn primary">Ejecutar</button>
-    </div>
+    <article class="sql-box">
+      <textarea id="sql-editor" name="sql_src">{{ sql }}</textarea>
+      {% if question %}
+        <script type="application/json" id="initial-viz">{{ question.viz | tojson }}</script>
+      {% endif %}
+      <footer class="sql-actions">
+        <small class="muted">
+          <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> ejecuta · <kbd>Ctrl</kbd> + <kbd>Espacio</kbd> autocompleta
+        </small>
+        <button id="run-btn" type="submit">Ejecutar</button>
+      </footer>
+    </article>
   </form>
 
   <div id="results" class="results">
-    <div class="empty">
+    <article class="empty">
       <p>Escribe una consulta y pulsa <strong>Ejecutar</strong>.</p>
-      <p class="muted small">Las tablas de la izquierda se pueden insertar en el editor con un clic.</p>
-    </div>
+      <small class="muted">Haz clic en una columna del panel izquierdo para insertarla en el editor.</small>
+    </article>
   </div>
 </section>
 {% endblock %}
