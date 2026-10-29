@@ -4,7 +4,7 @@
 - data/clientes.csv       → se ve como files.clientes
 - data/tienda.duckdb      → base adjunta 'tienda' con productos y pedidos
 
-Uso: python scripts/seed.py
+Uso: uv run scripts/seed.py
 """
 
 import os

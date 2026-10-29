@@ -20,8 +20,15 @@ from typing import Any
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 RESERVED = {
-    "files", "remote", "memory", "system", "temp", "main", "information_schema",
-    "pg_catalog", "default",
+    "files",
+    "remote",
+    "memory",
+    "system",
+    "temp",
+    "main",
+    "information_schema",
+    "pg_catalog",
+    "default",
 }
 TCP_TIMEOUT_S = 5.0
 
@@ -37,14 +44,14 @@ class SourceError(Exception):
 class Field:
     key: str
     label: str
-    type: str = "text"           # text | password | number | select | checkbox
+    type: str = "text"  # text | password | number | select | checkbox
     required: bool = False
     default: Any = ""
     placeholder: str = ""
     help: str = ""
     options: tuple[tuple[str, str], ...] = ()
     secret: bool = False
-    wide: bool = False           # ocupa toda la fila en el formulario
+    wide: bool = False  # ocupa toda la fila en el formulario
 
 
 @dataclass(frozen=True)
@@ -52,73 +59,139 @@ class Kind:
     key: str
     label: str
     description: str
-    extension: str | None        # extensión DuckDB necesaria
+    extension: str | None  # extensión DuckDB necesaria
     fields: tuple[Field, ...] = field(default_factory=tuple)
 
 
-_FORMAT = Field("format", "Formato", "select", True, "parquet",
-                options=(("parquet", "Parquet"), ("csv", "CSV"), ("json", "JSON")))
-_MODE = Field("mode", "Modo", "select", True, "live",
-              options=(("live", "En vivo (consulta el origen cada vez)"),
-                       ("snapshot", "Copia en memoria (se refresca al recargar)")),
-              help="La copia es más rápida para datos pequeños; en vivo, siempre al día.")
+_FORMAT = Field(
+    "format", "Formato", "select", True, "parquet", options=(("parquet", "Parquet"), ("csv", "CSV"), ("json", "JSON"))
+)
+_MODE = Field(
+    "mode",
+    "Modo",
+    "select",
+    True,
+    "live",
+    options=(
+        ("live", "En vivo (consulta el origen cada vez)"),
+        ("snapshot", "Copia en memoria (se refresca al recargar)"),
+    ),
+    help="La copia es más rápida para datos pequeños; en vivo, siempre al día.",
+)
 
 KINDS: dict[str, Kind] = {
     "postgres": Kind(
-        "postgres", "PostgreSQL", "Postgres, Supabase, Neon, RDS, Aurora…", "postgres",
+        "postgres",
+        "PostgreSQL",
+        "Postgres, Supabase, Neon, RDS, Aurora…",
+        "postgres",
         (
             Field("host", "Servidor", required=True, placeholder="db.miempresa.local"),
             Field("port", "Puerto", "number", True, 5432),
             Field("database", "Base de datos", required=True, placeholder="erp"),
             Field("user", "Usuario", required=True, placeholder="lectura"),
-            Field("password", "Contraseña", "password", secret=True,
-                  help="O env:NOMBRE_VARIABLE para leerla del entorno."),
-            Field("schema", "Esquema", placeholder="todos",
-                  help="Opcional: limita la fuente a un esquema."),
-            Field("sslmode", "SSL", "select", False, "prefer",
-                  options=(("prefer", "Si está disponible"), ("require", "Obligatorio"), ("disable", "Desactivado"))),
+            Field(
+                "password", "Contraseña", "password", secret=True, help="O env:NOMBRE_VARIABLE para leerla del entorno."
+            ),
+            Field("schema", "Esquema", placeholder="todos", help="Opcional: limita la fuente a un esquema."),
+            Field(
+                "sslmode",
+                "SSL",
+                "select",
+                False,
+                "prefer",
+                options=(("prefer", "Si está disponible"), ("require", "Obligatorio"), ("disable", "Desactivado")),
+            ),
         ),
     ),
     "mysql": Kind(
-        "mysql", "MySQL / MariaDB", "MySQL, MariaDB, PlanetScale…", "mysql",
+        "mysql",
+        "MySQL / MariaDB",
+        "MySQL, MariaDB, PlanetScale…",
+        "mysql",
         (
             Field("host", "Servidor", required=True, placeholder="mysql.miempresa.local"),
             Field("port", "Puerto", "number", True, 3306),
             Field("database", "Base de datos", required=True, placeholder="crm"),
             Field("user", "Usuario", required=True, placeholder="lectura"),
-            Field("password", "Contraseña", "password", secret=True,
-                  help="O env:NOMBRE_VARIABLE para leerla del entorno."),
+            Field(
+                "password", "Contraseña", "password", secret=True, help="O env:NOMBRE_VARIABLE para leerla del entorno."
+            ),
         ),
     ),
     "sqlite": Kind(
-        "sqlite", "SQLite", "Un fichero .sqlite / .db", "sqlite",
-        (Field("path", "Fichero", required=True, placeholder="app.sqlite", wide=True,
-               help="Ruta dentro de la carpeta de datos."),),
+        "sqlite",
+        "SQLite",
+        "Un fichero .sqlite / .db",
+        "sqlite",
+        (
+            Field(
+                "path",
+                "Fichero",
+                required=True,
+                placeholder="app.sqlite",
+                wide=True,
+                help="Ruta dentro de la carpeta de datos.",
+            ),
+        ),
     ),
     "duckdb": Kind(
-        "duckdb", "DuckDB", "Otro fichero .duckdb", None,
-        (Field("path", "Fichero", required=True, placeholder="historico.duckdb", wide=True,
-               help="Ruta dentro de la carpeta de datos."),),
+        "duckdb",
+        "DuckDB",
+        "Otro fichero .duckdb",
+        None,
+        (
+            Field(
+                "path",
+                "Fichero",
+                required=True,
+                placeholder="historico.duckdb",
+                wide=True,
+                help="Ruta dentro de la carpeta de datos.",
+            ),
+        ),
     ),
     "s3": Kind(
-        "s3", "S3 / R2 / GCS / MinIO", "Ficheros en almacenamiento de objetos", "httpfs",
+        "s3",
+        "S3 / R2 / GCS / MinIO",
+        "Ficheros en almacenamiento de objetos",
+        "httpfs",
         (
-            Field("url", "Ruta", required=True, placeholder="s3://bucket/ventas/*.parquet", wide=True,
-                  help="Admite comodines (*, **). gs:// para Google Cloud Storage; R2 y MinIO usan s3:// con su endpoint."),
+            Field(
+                "url",
+                "Ruta",
+                required=True,
+                placeholder="s3://bucket/ventas/*.parquet",
+                wide=True,
+                help="Admite comodines (*, **). gs:// para Google Cloud Storage; R2 y MinIO usan s3:// con su endpoint.",
+            ),
             _FORMAT,
             _MODE,
             Field("region", "Región", placeholder="eu-west-1"),
             Field("key_id", "Access key ID", placeholder="vacío = sin credenciales"),
             Field("secret", "Secret access key", "password", secret=True),
-            Field("endpoint", "Endpoint", placeholder="vacío = AWS",
-                  help="Para R2, MinIO u otros compatibles, p. ej. <cuenta>.r2.cloudflarestorage.com"),
-            Field("url_style", "Estilo de URL", "select", False, "vhost",
-                  options=(("vhost", "Virtual host (AWS)"), ("path", "Path (MinIO)"))),
+            Field(
+                "endpoint",
+                "Endpoint",
+                placeholder="vacío = AWS",
+                help="Para R2, MinIO u otros compatibles, p. ej. <cuenta>.r2.cloudflarestorage.com",
+            ),
+            Field(
+                "url_style",
+                "Estilo de URL",
+                "select",
+                False,
+                "vhost",
+                options=(("vhost", "Virtual host (AWS)"), ("path", "Path (MinIO)")),
+            ),
             Field("use_ssl", "Usar HTTPS", "checkbox", False, True),
         ),
     ),
     "url": Kind(
-        "url", "URL (HTTP)", "Un CSV, Parquet o JSON publicado en la web", "httpfs",
+        "url",
+        "URL (HTTP)",
+        "Un CSV, Parquet o JSON publicado en la web",
+        "httpfs",
         (
             Field("url", "URL", required=True, placeholder="https://ejemplo.org/datos.csv", wide=True),
             _FORMAT,
@@ -127,8 +200,8 @@ KINDS: dict[str, Kind] = {
     ),
 }
 
-ATTACHED = {"postgres", "mysql", "sqlite", "duckdb"}   # aparecen como base adjunta
-REMOTE = {"s3", "url"}                                  # aparecen como remote.<nombre>
+ATTACHED = {"postgres", "mysql", "sqlite", "duckdb"}  # aparecen como base adjunta
+REMOTE = {"s3", "url"}  # aparecen como remote.<nombre>
 
 
 # ---------------------------------------------------------------------------
@@ -164,11 +237,12 @@ class Source:
 @dataclass
 class Plan:
     """Lo que hay que ejecutar en DuckDB para activar una fuente."""
+
     extension: str | None
     statements: list[str]
-    allowed_prefix: str | None = None   # prefijo remoto a permitir en el sandbox
+    allowed_prefix: str | None = None  # prefijo remoto a permitir en el sandbox
     tcp_check: tuple[str, int] | None = None
-    probe: str = ""                     # consulta barata para comprobar que funciona
+    probe: str = ""  # consulta barata para comprobar que funciona
 
 
 def q(value: Any) -> str:
@@ -282,8 +356,9 @@ def plan(src: Source, data_dir: Path) -> Plan:
             "CREATE SCHEMA IF NOT EXISTS remote",
             f"CREATE OR REPLACE {obj} remote.{n} AS SELECT * FROM {reader(c.get('format') or 'parquet', url)}",
         ]
-        return Plan("httpfs", stmts, allowed_prefix=remote_prefix(url),
-                    probe=f"SELECT count(*) FROM (DESCRIBE remote.{n})")
+        return Plan(
+            "httpfs", stmts, allowed_prefix=remote_prefix(url), probe=f"SELECT count(*) FROM (DESCRIBE remote.{n})"
+        )
 
     raise SourceError(f"Tipo de fuente desconocido: {src.kind}")
 
@@ -307,8 +382,7 @@ def tcp_reachable(host: str, port: int, timeout: float = TCP_TIMEOUT_S) -> None:
 # ---------------------------------------------------------------------------
 # Validación de lo que llega del formulario
 # ---------------------------------------------------------------------------
-def from_form(kind: str, form: dict[str, Any], previous: Source | None = None,
-              taken: set[str] = frozenset()) -> Source:
+def from_form(kind: str, form: dict[str, Any], previous: Source | None = None, taken: set[str] = frozenset()) -> Source:
     if kind not in KINDS:
         raise SourceError("Elige un tipo de fuente.")
     name = str(form.get("name", "")).strip().lower()
@@ -327,7 +401,7 @@ def from_form(kind: str, form: dict[str, Any], previous: Source | None = None,
             continue
         val = "" if raw is None else str(raw).strip()
         if f.secret and not val and previous:
-            val = previous.config.get(f.key, "")   # vacío en edición = sin cambios
+            val = previous.config.get(f.key, "")  # vacío en edición = sin cambios
         if f.type == "number" and val:
             if not val.isdigit():
                 raise SourceError(f"«{f.label}» debe ser un número.")
@@ -335,5 +409,4 @@ def from_form(kind: str, form: dict[str, Any], previous: Source | None = None,
         if f.required and val in ("", None):
             raise SourceError(f"Falta «{f.label}».")
         cfg[f.key] = val if val != "" else (f.default if f.type == "select" else "")
-    return Source(previous.id if previous else None, name, kind, cfg,
-                  previous.enabled if previous else True)
+    return Source(previous.id if previous else None, name, kind, cfg, previous.enabled if previous else True)

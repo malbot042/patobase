@@ -120,7 +120,10 @@ class Store:
     # ------------------------------------------------------------- dashboards
     def list_dashboards(self) -> list[Dashboard]:
         with self._conn() as c:
-            return [Dashboard(r["id"], r["name"], r["description"]) for r in c.execute("SELECT * FROM dashboards ORDER BY name")]
+            return [
+                Dashboard(r["id"], r["name"], r["description"])
+                for r in c.execute("SELECT * FROM dashboards ORDER BY name")
+            ]
 
     def get_dashboard(self, did: int) -> Dashboard | None:
         with self._conn() as c:
@@ -129,7 +132,9 @@ class Store:
 
     def create_dashboard(self, name: str, description: str = "") -> int:
         with self._conn() as c:
-            return int(c.execute("INSERT INTO dashboards (name, description) VALUES (?, ?)", (name, description)).lastrowid)
+            return int(
+                c.execute("INSERT INTO dashboards (name, description) VALUES (?, ?)", (name, description)).lastrowid
+            )
 
     def delete_dashboard(self, did: int) -> None:
         with self._conn() as c:
@@ -147,7 +152,9 @@ class Store:
 
     def add_card(self, did: int, qid: int, width: int = 1) -> int:
         with self._conn() as c:
-            pos = c.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM dashboard_cards WHERE dashboard_id = ?", (did,)).fetchone()[0]
+            pos = c.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 FROM dashboard_cards WHERE dashboard_id = ?", (did,)
+            ).fetchone()[0]
             return int(
                 c.execute(
                     "INSERT INTO dashboard_cards (dashboard_id, question_id, position, width) VALUES (?, ?, ?, ?)",

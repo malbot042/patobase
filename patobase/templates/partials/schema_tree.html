@@ -2,7 +2,7 @@
 <a href="/sources" class="source-warning small">⚠ {{ failing|length }} fuente{{ '' if failing|length == 1 else 's' }} con error: {{ failing|join(", ") }}</a>
 {% endif %}
 {% if not schema %}
-<p class="muted small">No hay datos todavía. <a href="/sources/new">Conecta una fuente</a>, copia ficheros .parquet / .csv / .duckdb en la carpeta de datos o ejecuta <code>python scripts/seed.py</code>.</p>
+<p class="muted small">No hay datos todavía. <a href="/sources/new">Conecta una fuente</a>, copia ficheros .parquet / .csv / .duckdb en la carpeta de datos o ejecuta <code>uv run scripts/seed.py</code>.</p>
 {% endif %}
 {% for prefix, tables in schema.items() %}
 <details class="schema-group" open>

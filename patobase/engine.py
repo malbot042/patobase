@@ -128,10 +128,7 @@ class Engine:
             con.execute("CREATE SCHEMA IF NOT EXISTS files")
             for f in files:
                 reader = "read_parquet" if f.suffix == ".parquet" else "read_csv_auto"
-                con.execute(
-                    f"CREATE VIEW files.{_ident(f.stem)} AS "
-                    f"SELECT * FROM {reader}('{f.as_posix()}')"
-                )
+                con.execute(f"CREATE VIEW files.{_ident(f.stem)} AS SELECT * FROM {reader}('{f.as_posix()}')")
 
         for stmt in filter(None, (x.strip() for x in s.extra_attach.split(";"))):
             con.execute(stmt)
@@ -168,15 +165,19 @@ class Engine:
     # ----------------------------------------------------------------- schema
     def schema(self) -> dict[str, dict[str, list[tuple[str, str]]]]:
         """{base.esquema: {tabla: [(columna, tipo), ...]}}"""
-        rows = self.con.cursor().execute(
-            """
+        rows = (
+            self.con.cursor()
+            .execute(
+                """
             SELECT database_name, schema_name, table_name, column_name, data_type
             FROM duckdb_columns()
             WHERE NOT internal AND database_name NOT IN ('system', 'temp')
               AND schema_name NOT IN ('information_schema', 'pg_catalog')
             ORDER BY database_name, schema_name, table_name, column_index
             """
-        ).fetchall()
+            )
+            .fetchall()
+        )
         out: dict[str, dict[str, list[tuple[str, str]]]] = {}
         for db, sch, tbl, col, typ in rows:
             key = sch if db == "memory" else f"{db}.{sch}"
@@ -206,9 +207,7 @@ class Engine:
         if len(stmts) != 1:
             raise QueryError("Ejecuta una sola sentencia cada vez.")
         if stmts[0].type not in ALLOWED:
-            raise QueryError(
-                f"Sentencia no permitida ({stmts[0].type.name}). Solo se admiten consultas de lectura."
-            )
+            raise QueryError(f"Sentencia no permitida ({stmts[0].type.name}). Solo se admiten consultas de lectura.")
         return stmts[0].query.strip().rstrip(";")
 
     def run(self, sql: str, offset: int = 0, limit: int | None = None) -> QueryResult:
@@ -227,9 +226,7 @@ class Engine:
             rows = rel.limit(limit + 1, offset).fetchall()
             columns, types = rel.columns, [str(t) for t in rel.types]
         except duckdb.InterruptException as e:
-            raise QueryError(
-                f"La consulta superó el límite de {self.settings.timeout_s:g} s y se canceló."
-            ) from e
+            raise QueryError(f"La consulta superó el límite de {self.settings.timeout_s:g} s y se canceló.") from e
         except duckdb.Error as e:
             raise QueryError(str(e)) from e
         finally:
@@ -250,7 +247,7 @@ def to_records(res: QueryResult) -> list[dict[str, Any]]:
     out = []
     for row in res.rows:
         rec = {}
-        for col, val in zip(res.columns, row):
+        for col, val in zip(res.columns, row, strict=False):
             if val is None or isinstance(val, (bool, int, float, str)):
                 rec[col] = val
             elif hasattr(val, "isoformat"):
@@ -264,7 +261,20 @@ def to_records(res: QueryResult) -> list[dict[str, Any]]:
     return out
 
 
-NUMERIC = ("TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "FLOAT", "DOUBLE", "DECIMAL", "UBIGINT", "UINTEGER", "USMALLINT", "UTINYINT")
+NUMERIC = (
+    "TINYINT",
+    "SMALLINT",
+    "INTEGER",
+    "BIGINT",
+    "HUGEINT",
+    "FLOAT",
+    "DOUBLE",
+    "DECIMAL",
+    "UBIGINT",
+    "UINTEGER",
+    "USMALLINT",
+    "UTINYINT",
+)
 TEMPORAL = ("DATE", "TIMESTAMP", "TIME")
 
 
@@ -280,9 +290,9 @@ def vega_type(duck_type: str) -> str:
 def suggest_chart(columns: list[str], types: list[str]) -> dict[str, str]:
     """Elige un gráfico razonable según los tipos de las columnas."""
     vt = [vega_type(t) for t in types]
-    nums = [c for c, t in zip(columns, vt) if t == "quantitative"]
-    dims = [c for c, t in zip(columns, vt) if t != "quantitative"]
-    temporal = [c for c, t in zip(columns, vt) if t == "temporal"]
+    nums = [c for c, t in zip(columns, vt, strict=False) if t == "quantitative"]
+    dims = [c for c, t in zip(columns, vt, strict=False) if t != "quantitative"]
+    temporal = [c for c, t in zip(columns, vt, strict=False) if t == "temporal"]
     if not nums or len(columns) < 2:
         return {"type": "table", "x": columns[0] if columns else "", "y": "", "color": ""}
     if temporal:

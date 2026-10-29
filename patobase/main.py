@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import duckdb
-
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +24,8 @@ from .store import Store
 BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=BASE / "templates")
 templates.env.filters["vega_type"] = vega_type
+
+
 def fmt_num(v):
     """Números al estilo español: 1 234 567,89 (espacio fino como separador de miles)."""
     from decimal import Decimal
@@ -139,7 +140,7 @@ def run_query(request: Request, sql: str = Form(...), viz: str = Form("")):
         has_more=len(res.rows) > settings.page_size or res.has_more,
         records=to_records(res),
         config=config,
-        col_types={c: vega_type(t) for c, t in zip(res.columns, res.types)},
+        col_types={c: vega_type(t) for c, t in zip(res.columns, res.types, strict=False)},
         truncated=res.has_more,
         chart_rows=settings.chart_rows,
     )
@@ -152,8 +153,13 @@ def page_query(request: Request, sql: str = Form(...), offset: int = Form(0)):
     except QueryError as e:
         return render(request, "partials/error.html", error=str(e))
     return render(
-        request, "partials/table.html", res=res, page=res.rows, sql=sql,
-        page_size=settings.page_size, has_more=res.has_more,
+        request,
+        "partials/table.html",
+        res=res,
+        page=res.rows,
+        sql=sql,
+        page_size=settings.page_size,
+        has_more=res.has_more,
     )
 
 
@@ -206,7 +212,11 @@ def question_card(request: Request, qid: int):
         res = engine(request).run(q.sql, limit=settings.chart_rows)
     except QueryError as e:
         return render(request, "partials/error.html", error=str(e))
-    config = q.viz if q.viz.get("x") in res.columns or q.viz.get("type") == "table" else suggest_chart(res.columns, res.types)
+    config = (
+        q.viz
+        if q.viz.get("x") in res.columns or q.viz.get("type") == "table"
+        else suggest_chart(res.columns, res.types)
+    )
     return render(
         request,
         "partials/card_body.html",
@@ -215,7 +225,7 @@ def question_card(request: Request, qid: int):
         page=res.rows[:50],
         records=to_records(res),
         config=config,
-        col_types={c: vega_type(t) for c, t in zip(res.columns, res.types)},
+        col_types={c: vega_type(t) for c, t in zip(res.columns, res.types, strict=False)},
     )
 
 
@@ -241,7 +251,10 @@ def dashboard(request: Request, did: int):
     if not d:
         raise HTTPException(404, "Dashboard no encontrado")
     return render(
-        request, "dashboard.html", d=d, cards=store(request).cards(did),
+        request,
+        "dashboard.html",
+        d=d,
+        cards=store(request).cards(did),
         questions=store(request).list_questions(),
     )
 
@@ -299,11 +312,14 @@ def taken_names(request: Request, exclude: int | None = None) -> set[str]:
 
 def sources_ctx(request: Request) -> dict:
     eng = engine(request)
-    data_files = sorted(
-        f.name for f in settings.data_dir.glob("*") if f.suffix in (".duckdb", ".parquet", ".csv")
-    )
-    return {"sources": store(request).list_sources(), "status": eng.status, "kinds": KINDS,
-            "data_files": data_files, "data_dir": settings.data_dir.resolve()}
+    data_files = sorted(f.name for f in settings.data_dir.glob("*") if f.suffix in (".duckdb", ".parquet", ".csv"))
+    return {
+        "sources": store(request).list_sources(),
+        "status": eng.status,
+        "kinds": KINDS,
+        "data_files": data_files,
+        "data_dir": settings.data_dir.resolve(),
+    }
 
 
 @app.get("/sources", response_class=HTMLResponse)
@@ -321,8 +337,9 @@ def source_edit(request: Request, sid: int):
     src = store(request).get_source(sid)
     if not src:
         raise HTTPException(404, "Fuente no encontrada")
-    return render(request, "source_edit.html", src=src, kind=src.kind, kinds=KINDS,
-                  status=engine(request).status.get(src.name))
+    return render(
+        request, "source_edit.html", src=src, kind=src.kind, kinds=KINDS, status=engine(request).status.get(src.name)
+    )
 
 
 @app.get("/sources/form", response_class=HTMLResponse)
@@ -345,10 +362,15 @@ def _test_source(src: Source) -> tuple[int, list[str]]:
             con.execute(f"SET extension_directory = {q(settings.extension_dir)}")
         _, n = apply_source(con, src, settings.data_dir)
         if src.kind in ATTACHED:
-            names = [r[0] for r in con.execute(
-                "SELECT schema_name || '.' || table_name FROM duckdb_tables() "
-                "WHERE database_name = ? AND schema_name NOT IN ('information_schema', 'pg_catalog') "
-                "ORDER BY 1 LIMIT 8", [src.name]).fetchall()]
+            names = [
+                r[0]
+                for r in con.execute(
+                    "SELECT schema_name || '.' || table_name FROM duckdb_tables() "
+                    "WHERE database_name = ? AND schema_name NOT IN ('information_schema', 'pg_catalog') "
+                    "ORDER BY 1 LIMIT 8",
+                    [src.name],
+                ).fetchall()
+            ]
         else:
             names = [r[0] for r in con.execute(f"DESCRIBE remote.{src.name}").fetchall()][:8]
         return n, names
@@ -363,8 +385,7 @@ async def source_test(request: Request):
         src = _parse_source(request, form)
         n, names = _pool.submit(_test_source, src).result(timeout=TEST_TIMEOUT_S)
     except FutureTimeout:
-        return render(request, "partials/source_result.html", ok=False,
-                      message=f"Sin respuesta en {TEST_TIMEOUT_S} s.")
+        return render(request, "partials/source_result.html", ok=False, message=f"Sin respuesta en {TEST_TIMEOUT_S} s.")
     except SourceError as e:
         return render(request, "partials/source_result.html", ok=False, message=str(e))
     unit = "tabla" if src.kind in ATTACHED else "columna"

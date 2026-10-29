@@ -69,8 +69,11 @@ def test_sandbox_blocks_dangerous_sql(client, sql):
 def test_save_question_and_dashboard(client):
     r = client.post(
         "/questions",
-        data={"name": "Ventas por canal", "sql": "SELECT canal, count(*) n FROM files.ventas GROUP BY 1",
-              "viz": '{"type": "arc", "x": "canal", "y": "n"}'},
+        data={
+            "name": "Ventas por canal",
+            "sql": "SELECT canal, count(*) n FROM files.ventas GROUP BY 1",
+            "viz": '{"type": "arc", "x": "canal", "y": "n"}',
+        },
     )
     assert "Guardada" in r.text
     qid = int(r.headers["HX-Replace-Url"].split("=")[1])

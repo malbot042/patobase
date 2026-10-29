@@ -62,16 +62,36 @@ Todo lo que pongas en la carpeta de datos (`./data` por defecto) aparece automá
 
 ## Arrancar
 
+El proyecto se gestiona con [uv](https://docs.astral.sh/uv/): crea el entorno virtual, instala la versión de Python de `.python-version` y fija las dependencias exactas en `uv.lock`.
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-python scripts/seed.py        # datos de ejemplo: ventas, clientes y una base 'tienda'
-patobase                      # http://127.0.0.1:8000
+# Instalar uv (una sola vez): https://docs.astral.sh/uv/getting-started/installation/
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+git clone https://github.com/malbot042/patobase && cd patobase
+uv sync                         # crea .venv e instala dependencias (incluidas las de desarrollo)
+uv run scripts/seed.py          # datos de ejemplo: ventas, clientes y una base 'tienda'
+uv run patobase                 # http://127.0.0.1:8000
 ```
 
-Para desarrollar con recarga automática: `PATOBASE_RELOAD=1 patobase`.
+No hace falta activar el entorno: `uv run` usa siempre `.venv` y lo sincroniza con `uv.lock` antes de ejecutar (incluidas las dependencias de desarrollo, salvo que pases `--no-dev`).
 
-Tests: `pytest`. Los de integración contra Postgres, MySQL, S3 y HTTP reales se activan con `PATOBASE_IT=1`; las conexiones están documentadas al principio de `tests/test_sources.py`.
+### Tareas habituales
+
+| Para… | Comando |
+|---|---|
+| Desarrollar con recarga automática | `PATOBASE_RELOAD=1 uv run patobase` |
+| Tests | `uv run pytest` |
+| Lint / formato | `uv run ruff check` · `uv run ruff format` |
+| Añadir una dependencia | `uv add paquete` (o `uv add --dev paquete`) |
+| Quitar una dependencia | `uv remove paquete` |
+| Actualizar dependencias | `uv lock --upgrade` y después `uv sync` |
+| Producción (sin dependencias de desarrollo) | `uv sync --no-dev --locked` y arrancar con `uv run --no-dev patobase` |
+| Generar el paquete (wheel) | `uv build` |
+
+`uv.lock` se versiona en Git: así todo el mundo, y el despliegue, usa exactamente las mismas versiones.
+
+Los tests de integración contra Postgres, MySQL, S3 y HTTP reales se activan con `PATOBASE_IT=1 uv run pytest`; las conexiones están documentadas al principio de `tests/test_sources.py`.
 
 ## Configuración
 
@@ -113,6 +133,9 @@ patobase/
   static/vendor/   librerías JS incluidas (sin CDN, funciona offline)
 scripts/seed.py    datos de ejemplo
 tests/             pytest
+pyproject.toml     dependencias y configuración (uv, ruff, pytest)
+uv.lock            versiones exactas de todas las dependencias
+.python-version    versión de Python que usa uv
 ```
 
 Los metadatos van en SQLite y no en DuckDB porque son escrituras pequeñas y concurrentes, justo lo que DuckDB no hace bien (un solo escritor por proceso).

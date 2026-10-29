@@ -46,13 +46,27 @@ def test_required_fields():
 
 def test_secret_kept_when_blank_on_edit():
     prev = Source(1, "erp", "postgres", {"host": "h", "port": 5432, "database": "d", "user": "u", "password": "s3cr3t"})
-    new = from_form("postgres", {"name": "erp", "host": "h2", "port": "5432", "database": "d", "user": "u", "password": ""}, prev)
+    new = from_form(
+        "postgres", {"name": "erp", "host": "h2", "port": "5432", "database": "d", "user": "u", "password": ""}, prev
+    )
     assert new.config["password"] == "s3cr3t" and new.config["host"] == "h2" and new.id == 1
 
 
 def test_postgres_plan_uses_secret_and_escapes(tmp_path):
-    src = Source(None, "erp", "postgres", {"host": "db", "port": 5432, "database": "erp", "user": "lectura",
-                                           "password": "it's", "schema": "rrhh", "sslmode": "require"})
+    src = Source(
+        None,
+        "erp",
+        "postgres",
+        {
+            "host": "db",
+            "port": 5432,
+            "database": "erp",
+            "user": "lectura",
+            "password": "it's",
+            "schema": "rrhh",
+            "sslmode": "require",
+        },
+    )
     p = plan(src, tmp_path)
     assert "PASSWORD 'it''s'" in p.statements[0]
     assert "SCHEMA 'rrhh'" in p.statements[1] and "READ_ONLY" in p.statements[1]
@@ -62,7 +76,9 @@ def test_postgres_plan_uses_secret_and_escapes(tmp_path):
 
 def test_env_secret(tmp_path, monkeypatch):
     monkeypatch.setenv("PB_TEST_PW", "desde-entorno")
-    src = Source(None, "crm", "mysql", {"host": "h", "port": 3306, "database": "c", "user": "u", "password": "env:PB_TEST_PW"})
+    src = Source(
+        None, "crm", "mysql", {"host": "h", "port": 3306, "database": "c", "user": "u", "password": "env:PB_TEST_PW"}
+    )
     assert "PASSWORD 'desde-entorno'" in plan(src, tmp_path).statements[0]
     src.config["password"] = "env:NO_EXISTE_XYZ"
     with pytest.raises(SourceError, match="NO_EXISTE_XYZ"):
@@ -70,9 +86,22 @@ def test_env_secret(tmp_path, monkeypatch):
 
 
 def test_s3_plan(tmp_path):
-    src = Source(None, "ventas", "s3", {"url": "s3://bucket/ventas/*.parquet", "format": "parquet", "mode": "live",
-                                        "key_id": "AK", "secret": "SK", "region": "eu-west-1", "endpoint": "",
-                                        "url_style": "vhost", "use_ssl": True})
+    src = Source(
+        None,
+        "ventas",
+        "s3",
+        {
+            "url": "s3://bucket/ventas/*.parquet",
+            "format": "parquet",
+            "mode": "live",
+            "key_id": "AK",
+            "secret": "SK",
+            "region": "eu-west-1",
+            "endpoint": "",
+            "url_style": "vhost",
+            "use_ssl": True,
+        },
+    )
     p = plan(src, tmp_path)
     assert "SCOPE 's3://bucket/ventas/'" in p.statements[0] and "KEY_ID 'AK'" in p.statements[0]
     assert p.statements[-1].startswith("CREATE OR REPLACE VIEW remote.ventas")
@@ -150,8 +179,16 @@ def test_name_clash_with_data_dir_file(client):
 
 
 def test_unreachable_source_is_saved_but_flagged(client):
-    form = {"kind": "postgres", "name": "caida", "host": "127.0.0.1", "port": "1",
-            "database": "x", "user": "u", "password": "p", "sslmode": "disable"}
+    form = {
+        "kind": "postgres",
+        "name": "caida",
+        "host": "127.0.0.1",
+        "port": "1",
+        "database": "x",
+        "user": "u",
+        "password": "p",
+        "sslmode": "disable",
+    }
     r = client.post("/sources/test", data=form)
     assert "No se puede conectar" in r.text
     r = client.post("/sources", data=form)
@@ -162,8 +199,16 @@ def test_unreachable_source_is_saved_but_flagged(client):
 
 
 def test_secret_never_rendered(client):
-    form = {"kind": "postgres", "name": "pg", "host": "127.0.0.1", "port": "1",
-            "database": "x", "user": "u", "password": "SuperSecreta123", "sslmode": "disable"}
+    form = {
+        "kind": "postgres",
+        "name": "pg",
+        "host": "127.0.0.1",
+        "port": "1",
+        "database": "x",
+        "user": "u",
+        "password": "SuperSecreta123",
+        "sslmode": "disable",
+    }
     client.post("/sources", data=form)
     page = client.get("/sources/1/edit").text
     assert "SuperSecreta123" not in page and "sin cambios" in page
@@ -194,13 +239,30 @@ def test_integration_real_servers(client, tmp_path):
     http_url = os.getenv("PATOBASE_IT_HTTP", "http://127.0.0.1:8899/paises.csv")
 
     forms = [
-        {"kind": "postgres", "name": "erp", "host": h, "port": port, "database": db, "user": user,
-         "password": pw, "sslmode": "disable"},
+        {
+            "kind": "postgres",
+            "name": "erp",
+            "host": h,
+            "port": port,
+            "database": db,
+            "user": user,
+            "password": pw,
+            "sslmode": "disable",
+        },
         {"kind": "mysql", "name": "crm", "host": mh, "port": mport, "database": mdb, "user": muser, "password": mpw},
         {"kind": "sqlite", "name": "app", "path": "app.sqlite"},
-        {"kind": "s3", "name": "ventas_s3", "url": f"s3://{bucket}/ventas/*.parquet", "format": "parquet",
-         "mode": "live", "region": "us-east-1", "key_id": "x", "secret": "y",
-         "endpoint": f"{s3_host}:{s3_port}", "url_style": "path"},  # use_ssl desmarcado
+        {
+            "kind": "s3",
+            "name": "ventas_s3",
+            "url": f"s3://{bucket}/ventas/*.parquet",
+            "format": "parquet",
+            "mode": "live",
+            "region": "us-east-1",
+            "key_id": "x",
+            "secret": "y",
+            "endpoint": f"{s3_host}:{s3_port}",
+            "url_style": "path",
+        },  # use_ssl desmarcado
         {"kind": "url", "name": "paises", "url": http_url, "format": "csv", "mode": "snapshot"},
     ]
     for f in forms:
@@ -211,15 +273,21 @@ def test_integration_real_servers(client, tmp_path):
     page = client.get("/sources").text
     assert page.count("Conectada") == 5
 
-    for sql in ["SELECT count(*) FROM erp.public.facturas", "SELECT count(*) FROM crm.oportunidades",
-                "SELECT * FROM app.usuarios", "SELECT count(*) FROM remote.ventas_s3",
-                "SELECT * FROM remote.paises"]:
+    for sql in [
+        "SELECT count(*) FROM erp.public.facturas",
+        "SELECT count(*) FROM crm.oportunidades",
+        "SELECT * FROM app.usuarios",
+        "SELECT count(*) FROM remote.ventas_s3",
+        "SELECT * FROM remote.paises",
+    ]:
         assert "error-box" not in client.post("/query/run", data={"sql": sql}).text, sql
 
     # El sandbox sigue cerrado para todo lo demás
-    for sql in [f"SELECT * FROM read_parquet('s3://{bucket}/otra/*.parquet')",
-                "SELECT * FROM read_csv('http://127.0.0.1:1/x.csv')",
-                "SELECT * FROM read_csv('/etc/passwd')"]:
+    for sql in [
+        f"SELECT * FROM read_parquet('s3://{bucket}/otra/*.parquet')",
+        "SELECT * FROM read_csv('http://127.0.0.1:1/x.csv')",
+        "SELECT * FROM read_csv('/etc/passwd')",
+    ]:
         assert "Permission" in client.post("/query/run", data={"sql": sql}).text, sql
 
 
