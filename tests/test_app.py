@@ -107,3 +107,16 @@ def test_cli_port_and_host(monkeypatch):
     assert calls[1] == {"host": "0.0.0.0", "port": 9000, "reload": False}  # argumento gana
     with pytest.raises(SystemExit):
         run(["--port", "70000"])
+
+
+def test_types_with_time_zone_and_complex_values(client):
+    """Regresión: timestamptz necesita pytz; el resto de tipos no debe romper la tabla ni el gráfico."""
+    sql = (
+        "SELECT now() AS ahora, TIMESTAMPTZ '2026-10-29 10:00:00+01' AS tstz, TIMETZ '10:00:00+01' AS ttz, "
+        "INTERVAL 3 DAY AS intervalo, uuid() AS id, [1, 2] AS lista, {'a': 1} AS registro, MAP {'k': 1} AS mapa, "
+        "'\\xAA'::BLOB AS binario, 2::HUGEINT AS enorme, 'a'::ENUM('a', 'b') AS enumerado"
+    )
+    r = client.post("/query/run", data={"sql": sql})
+    assert r.status_code == 200
+    assert "error-box" not in r.text, r.text[:500]
+    assert "+01:00" in r.text or "+00:00" in r.text
