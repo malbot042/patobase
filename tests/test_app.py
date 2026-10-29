@@ -91,3 +91,19 @@ def test_save_question_and_dashboard(client):
 def test_new_question_with_empty_id(client):
     r = client.post("/questions", data={"id": "", "name": "Nueva", "sql": "SELECT 1 AS a", "viz": "{}"})
     assert r.status_code == 200 and "Guardada" in r.text
+
+
+def test_cli_port_and_host(monkeypatch):
+    import uvicorn
+
+    from patobase.main import run
+
+    calls = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: calls.append(kw))
+    monkeypatch.setenv("PATOBASE_PORT", "8500")
+    run([])
+    run(["--port", "9000", "--host", "0.0.0.0"])
+    assert calls[0]["port"] == 8500  # variable de entorno
+    assert calls[1] == {"host": "0.0.0.0", "port": 9000, "reload": False}  # argumento gana
+    with pytest.raises(SystemExit):
+        run(["--port", "70000"])

@@ -80,7 +80,9 @@ No hace falta activar el entorno: `uv run` usa siempre `.venv` y lo sincroniza c
 
 | Para… | Comando |
 |---|---|
-| Desarrollar con recarga automática | `PATOBASE_RELOAD=1 uv run patobase` |
+| Otro puerto o dirección | `uv run patobase --port 9000` · `uv run patobase --host 0.0.0.0 -p 9000` |
+| Desarrollar con recarga automática | `uv run patobase --reload` |
+| Ver todas las opciones | `uv run patobase --help` |
 | Tests | `uv run pytest` |
 | Lint / formato | `uv run ruff check` · `uv run ruff format` |
 | Añadir una dependencia | `uv add paquete` (o `uv add --dev paquete`) |
@@ -104,7 +106,7 @@ Los tests de integración contra Postgres, MySQL, S3 y HTTP reales se activan co
 | `PATOBASE_PAGE_SIZE` | `100` | filas por página en la tabla |
 | `PATOBASE_CHART_ROWS` | `2000` | filas máximas que se envían al gráfico |
 | `PATOBASE_TIMEOUT` | `30` | segundos antes de cancelar una consulta |
-| `PATOBASE_HOST` / `PATOBASE_PORT` | `127.0.0.1` / `8000` | |
+| `PATOBASE_HOST` / `PATOBASE_PORT` | `127.0.0.1` / `8000` | lo mismo que `--host` / `--port` (el argumento tiene prioridad) |
 
 ## Seguridad
 

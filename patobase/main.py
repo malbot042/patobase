@@ -433,14 +433,38 @@ def source_delete(request: Request, sid: int):
     return Response(headers={"HX-Redirect": "/sources"})
 
 
-def run() -> None:  # punto de entrada `patobase`
+def run(argv: list[str] | None = None) -> None:  # punto de entrada `patobase`
+    """Arranca el servidor. Prioridad: argumento > variable de entorno > valor por defecto."""
+    import argparse
     import os
 
     import uvicorn
 
-    uvicorn.run(
-        "patobase.main:app",
-        host=os.getenv("PATOBASE_HOST", "127.0.0.1"),
-        port=int(os.getenv("PATOBASE_PORT", "8000")),
-        reload=os.getenv("PATOBASE_RELOAD") == "1",
+    parser = argparse.ArgumentParser(
+        prog="patobase",
+        description="Consultas SQL y dashboards al estilo Metabase con DuckDB.",
+        epilog="Las variables PATOBASE_HOST, PATOBASE_PORT y PATOBASE_RELOAD=1 dan los valores por defecto.",
     )
+    parser.add_argument(
+        "--host",
+        default=os.getenv("PATOBASE_HOST", "127.0.0.1"),
+        help="dirección en la que escuchar (por defecto: %(default)s; 0.0.0.0 para toda la red)",
+    )
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        default=int(os.getenv("PATOBASE_PORT", "8000")),
+        help="puerto (por defecto: %(default)s)",
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        default=os.getenv("PATOBASE_RELOAD") == "1",
+        help="recargar al cambiar el código (desarrollo)",
+    )
+    args = parser.parse_args(argv)
+    if not 1 <= args.port <= 65535:
+        parser.error(f"puerto no válido: {args.port}")
+
+    uvicorn.run("patobase.main:app", host=args.host, port=args.port, reload=args.reload)
