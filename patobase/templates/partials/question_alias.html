@@ -1,0 +1,7 @@
+<small id="q-alias" class="q-alias" {% if oob %}hx-swap-oob="true"{% endif %}>
+  {% if question %}
+    Disponible como fuente:
+    <code data-tooltip="Úsala en SQL o como datos de partida en el editor visual" data-placement="bottom">{{ question.view }}</code>
+    {% if view_error %}<span class="err-msg" title="{{ view_error }}">⚠ {{ view_error }}</span>{% endif %}
+  {% endif %}
+</small>

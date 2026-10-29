@@ -29,6 +29,7 @@ RESERVED = {
     "information_schema",
     "pg_catalog",
     "default",
+    "preguntas",
 }
 TCP_TIMEOUT_S = 5.0
 

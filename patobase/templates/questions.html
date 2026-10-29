@@ -3,21 +3,22 @@
 {% block content %}
 <div class="page-head">
   <h2>Preguntas guardadas</h2>
-  <a href="/" role="button">Nueva consulta</a>
+  <a href="/builder" role="button">Nueva consulta</a>
 </div>
 {% if questions %}
 <div class="overflow-auto">
   <table class="questions">
     <thead>
-      <tr><th scope="col">Nombre</th><th scope="col">Visualización</th><th scope="col">Actualizada</th><th></th></tr>
+      <tr><th scope="col">Nombre</th><th scope="col">Tipo</th><th scope="col">Visualización</th><th scope="col">Actualizada</th><th></th></tr>
     </thead>
     <tbody>
       {% for q in questions %}
       <tr id="q-{{ q.id }}">
         <td>
-          <a href="/?q={{ q.id }}"><strong>{{ q.name }}</strong></a><br>
-          <code class="sql-snippet">{{ q.sql|replace("\n", " ")|truncate(110) }}</code>
+          <a href="{{ q.edit_url }}"><strong>{{ q.name }}</strong></a><br>
+          <code class="sql-snippet" title="Úsala como fuente con este nombre">{{ q.view }}</code>
         </td>
+        <td><span class="kind kind-{{ 'builder' if q.kind == 'builder' else 'sqlq' }}">{{ 'Visual' if q.kind == 'builder' else 'SQL' }}</span></td>
         <td><mark>{{ {"table": "Tabla", "bar": "Barras", "line": "Líneas", "area": "Área", "point": "Dispersión", "arc": "Sectores"}.get(q.viz.get("type", "table"), "Tabla") }}</mark></td>
         <td><small class="muted">{{ q.updated_at[:16] }}</small></td>
         <td class="actions">

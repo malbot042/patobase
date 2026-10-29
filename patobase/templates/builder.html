@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}{{ question.name if question else "Nueva pregunta visual" }}{% endblock %}
+{% block main_class %}container builder-page{% endblock %}
+{% block content %}
+{# Tablas agrupadas por origen, para los <select> de datos y uniones #}
+{% set groups = {} %}
+{% for key, t in catalog.tables.items() %}{% set _ = groups.setdefault(t.prefix, []).append((key, t.name)) %}{% endfor %}
+{% macro table_options() %}
+  {% for prefix, items in groups.items() if prefix != 'preguntas' %}
+  <optgroup label="{{ prefix }}">
+    {% for key, name in items %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+  </optgroup>
+  {% endfor %}
+  {% if groups.preguntas %}
+  <optgroup label="Preguntas guardadas">
+    {% for key, name in groups.preguntas %}<option value="{{ key }}">{{ name }}</option>{% endfor %}
+  </optgroup>
+  {% endif %}
+{% endmacro %}
+
+<div x-data="builder({{ spec|tojson_attr }}, {{ catalog|tojson_attr }})"
+     @keydown.ctrl.enter.window="run()" @keydown.meta.enter.window="run()"
+     @open-as-sql.window="openAsSql()">
+  {% if question %}<script type="application/json" id="initial-viz">{{ question.viz | tojson }}</script>{% endif %}
+
+  {% with mode="builder" %}{% include "partials/question_bar.html" %}{% endwith %}
+
+  <div class="notebook">
+    {# ---------------------------------------------------------------- datos #}
+    <section class="nb-step step-data">
+      <h6>Datos</h6>
+      <div class="nb-body">
+        <select x-model="spec.source" @change="resetFromSource()" aria-label="Datos de partida">
+          <option value="">Elige una tabla o una pregunta guardada…</option>
+          {{ table_options() }}
+        </select>
+      </div>
+    </section>
+
+    <template x-if="spec.source">
+      <div>
+        {# ------------------------------------------------------------ unir #}
+        <section class="nb-step step-join" x-show="spec.joins.length" x-cloak>
+          <h6>Unir datos</h6>
+          <template x-for="(j, i) in spec.joins" :key="i">
+            <div class="nb-row">
+              <select x-model="j.how" aria-label="Tipo de unión" class="w-auto">
+                <option value="left">Unión izquierda</option>
+                <option value="inner">Unión interna</option>
+              </select>
+              <select x-model="j.table" @change="trimAfterJoin(i); guessJoin(j, i)" aria-label="Tabla a unir">
+                <option value="">Tabla…</option>
+                {{ table_options() }}
+              </select>
+              <span class="nb-word">donde</span>
+              <select x-model="j.left" aria-label="Columna de la izquierda">
+                <template x-for="c in columnsUpTo(i)" :key="c.ref">
+                  <option :value="c.ref" x-text="c.label" :selected="c.ref === j.left"></option>
+                </template>
+              </select>
+              <span class="nb-word">=</span>
+              <select x-model="j.right" aria-label="Columna de la derecha">
+                <template x-for="c in tableColumns(j.table)" :key="c[0]">
+                  <option :value="c[0]" x-text="c[0]" :selected="c[0] === j.right"></option>
+                </template>
+              </select>
+              <button type="button" class="icon-btn danger" @click="removeJoin(i)" aria-label="Quitar unión">✕</button>
+            </div>
+          </template>
+        </section>
+
+        {# --------------------------------------------------------- filtrar #}
+        <section class="nb-step step-filter" x-show="spec.filters.length" x-cloak>
+          <h6>Filtrar</h6>
+          <template x-for="(f, i) in spec.filters" :key="i">
+            <div class="nb-row">
+              <select x-model="f.col" @change="f.op = opsFor(f.col)[0]; f.value = ''; f.value2 = ''" aria-label="Columna">
+                <template x-for="c in allColumns()" :key="c.ref">
+                  <option :value="c.ref" x-text="c.label" :selected="c.ref === f.col"></option>
+                </template>
+              </select>
+              <select x-model="f.op" class="w-auto" aria-label="Condición">
+                <template x-for="op in opsFor(f.col)" :key="op">
+                  <option :value="op" x-text="catalog.ops[op]" :selected="op === f.op"></option>
+                </template>
+              </select>
+              <template x-if="needsValue(f.op)">
+                <input :type="inputType(f)" x-model="f.value" :placeholder="placeholder(f)" step="any" aria-label="Valor">
+              </template>
+              <template x-if="f.op === 'between'">
+                <span class="nb-word">y</span>
+              </template>
+              <template x-if="f.op === 'between'">
+                <input :type="inputType(f)" x-model="f.value2" step="any" aria-label="Segundo valor">
+              </template>
+              <button type="button" class="icon-btn danger" @click="spec.filters.splice(i, 1)" aria-label="Quitar filtro">✕</button>
+            </div>
+          </template>
+        </section>
+
+        {# --------------------------------------------------------- resumir #}
+        <section class="nb-step step-summarize" x-show="spec.metrics.length || spec.groups.length" x-cloak>
+          <h6>Resumir</h6>
+          <div class="nb-summarize">
+            <div>
+              <template x-for="(m, i) in spec.metrics" :key="i">
+                <div class="nb-row">
+                  <select x-model="m.agg" class="w-auto" @change="fixMetric(m)" aria-label="Métrica">
+                    <template x-for="(label, k) in catalog.aggs" :key="k">
+                      <option :value="k" x-text="label" :selected="k === m.agg"></option>
+                    </template>
+                  </select>
+                  <template x-if="m.agg !== 'count'">
+                    <select x-model="m.col" aria-label="Columna de la métrica">
+                      <template x-for="c in metricColumns(m.agg)" :key="c.ref">
+                        <option :value="c.ref" x-text="c.label" :selected="c.ref === m.col"></option>
+                      </template>
+                    </select>
+                  </template>
+                  <button type="button" class="icon-btn danger" @click="spec.metrics.splice(i, 1)" aria-label="Quitar métrica">✕</button>
+                </div>
+              </template>
+              <p class="muted small" x-show="!spec.metrics.length">Sin métricas: se listan los valores distintos.</p>
+            </div>
+            <div class="nb-by">
+              <span class="nb-word">por</span>
+              <div>
+                <template x-for="(g, i) in spec.groups" :key="i">
+                  <div class="nb-row">
+                    <select x-model="g.col" @change="g.bucket = isTemporal(g.col) ? 'month' : ''" aria-label="Agrupar por">
+                      <template x-for="c in allColumns()" :key="c.ref">
+                        <option :value="c.ref" x-text="c.label" :selected="c.ref === g.col"></option>
+                      </template>
+                    </select>
+                    <template x-if="isTemporal(g.col)">
+                      <select x-model="g.bucket" class="w-auto" aria-label="Granularidad">
+                        <option value="">fecha exacta</option>
+                        <template x-for="(label, k) in catalog.buckets" :key="k">
+                          <option x-show="k" :value="k" x-text="label" :selected="k === g.bucket"></option>
+                        </template>
+                      </select>
+                    </template>
+                    <button type="button" class="icon-btn danger" @click="spec.groups.splice(i, 1)" aria-label="Quitar agrupación">✕</button>
+                  </div>
+                </template>
+                <p class="muted small" x-show="!spec.groups.length">Sin agrupar: un único total.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {# -------------------------------------------- columnas (sin resumir) #}
+        <section class="nb-step step-columns" x-show="showColumns" x-cloak>
+          <h6>Columnas</h6>
+          <div class="nb-chips">
+            <template x-for="c in allColumns()" :key="c.ref">
+              <label class="chip">
+                <input type="checkbox" :value="c.ref" x-model="spec.columns">
+                <span x-text="c.label"></span>
+              </label>
+            </template>
+          </div>
+          <small class="muted">Sin marcar ninguna se muestran todas.</small>
+        </section>
+
+        {# ---------------------------------------------------- ordenar/límite #}
+        <section class="nb-step step-sort" x-show="spec.sort.length || spec.limit" x-cloak>
+          <h6>Ordenar y limitar</h6>
+          <template x-for="(o, i) in spec.sort" :key="i">
+            <div class="nb-row">
+              <select x-model="o.by" aria-label="Ordenar por">
+                <template x-for="c in compiled.columns" :key="c.name">
+                  <option :value="c.name" x-text="c.name" :selected="c.name === o.by"></option>
+                </template>
+              </select>
+              <select x-model="o.dir" class="w-auto" aria-label="Sentido">
+                <option value="asc">ascendente</option>
+                <option value="desc">descendente</option>
+              </select>
+              <button type="button" class="icon-btn danger" @click="spec.sort.splice(i, 1)" aria-label="Quitar orden">✕</button>
+            </div>
+          </template>
+          <div class="nb-row" x-show="spec.limit !== null && spec.limit !== ''">
+            <span class="nb-word">Límite</span>
+            <input type="number" min="1" x-model.number="spec.limit" class="w-limit" aria-label="Límite de filas">
+            <span class="nb-word">filas</span>
+            <button type="button" class="icon-btn danger" @click="spec.limit = null" aria-label="Quitar límite">✕</button>
+          </div>
+        </section>
+
+        {# ------------------------------------------------------- añadir paso #}
+        <div class="nb-add">
+          <button type="button" class="secondary outline" @click="addJoin()">＋ Unir datos</button>
+          <button type="button" class="secondary outline" @click="addFilter()">＋ Filtro</button>
+          <button type="button" class="secondary outline" @click="addMetric()">＋ Métrica</button>
+          <button type="button" class="secondary outline" @click="addGroup()">＋ Agrupar por</button>
+          <button type="button" class="secondary outline" @click="showColumnsStep = true" x-show="!spec.metrics.length && !spec.groups.length && !showColumns">＋ Columnas</button>
+          <button type="button" class="secondary outline" @click="addSort()">＋ Ordenar</button>
+          <button type="button" class="secondary outline" @click="spec.limit = 100" x-show="spec.limit === null || spec.limit === ''">＋ Límite</button>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <div class="nb-actions">
+    <button type="button" @click="run()" :disabled="!spec.source || !!compiled.error" :aria-busy="running">Ver resultados</button>
+    <button type="button" class="secondary outline" @click="showSql = !showSql" :disabled="!compiled.sql"
+            x-text="showSql ? 'Ocultar SQL' : 'Ver SQL'"></button>
+    <small class="muted"><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd></small>
+    <small class="err-inline" x-show="compiled.error" x-text="compiled.error" x-cloak></small>
+  </div>
+  <pre class="nb-sql" x-show="showSql && compiled.sql" x-cloak><code x-text="compiled.sql"></code></pre>
+
+  <div id="results" class="results">
+    <article class="empty">
+      <p>Elige los datos, añade los pasos que necesites y pulsa <strong>Ver resultados</strong>.</p>
+      <small class="muted">Puedes partir también de una <em>pregunta guardada</em>: aparecen al final de la lista de datos.</small>
+    </article>
+  </div>
+</div>
+{% endblock %}

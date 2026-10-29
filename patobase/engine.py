@@ -37,6 +37,10 @@ def _ident(name: str) -> str:
     return f"_{clean}" if clean[:1].isdigit() else clean
 
 
+def _quote(ident: str) -> str:
+    return '"' + ident.replace('"', '""') + '"'
+
+
 def _sql_list(items: list[str]) -> str:
     return "[" + ", ".join(q(i) for i in items) + "]"
 
@@ -101,15 +105,93 @@ def _clean_error(msg: str) -> str:
     return msg.strip().splitlines()[0][:400]
 
 
+# preguntas.x · "preguntas"."x" · memory.preguntas.x · PREGUNTAS . "x"
+QUESTION_REF = re.compile(r'(?<![\w"])"?preguntas"?\s*\.\s*"?([A-Za-z0-9_]+)"?', re.IGNORECASE)
+
+
+def question_deps(sql: str) -> set[str]:
+    """Alias de otras preguntas que usa una consulta (preguntas.<alias>)."""
+    return {m.lower() for m in QUESTION_REF.findall(sql or "")}
+
+
+def find_cycle(graph: dict[str, set[str]], start: str) -> list[str] | None:
+    """Devuelve el camino de un ciclo que pasa por `start`, si lo hay."""
+    path: list[str] = []
+
+    def visit(node: str, seen: set[str]) -> list[str] | None:
+        path.append(node)
+        for dep in graph.get(node, ()):
+            if dep == start:
+                return [*path, start]
+            if dep not in seen:
+                seen.add(dep)
+                found = visit(dep, seen)
+                if found:
+                    return found
+        path.pop()
+        return None
+
+    return visit(start, {start})
+
+
 class Engine:
-    def __init__(self, settings: Settings, sources: list[Source] | None = None):
+    def __init__(self, settings: Settings, sources: list[Source] | None = None, questions: list | None = None):
         self.settings = settings
         self.sources = [s for s in (sources or []) if s.enabled]
         self.status: dict[str, SourceStatus] = {}
+        self.question_errors: dict[str, str] = {}  # alias → error al crear su vista
+        self._ddl = threading.Lock()
         self.con = duckdb.connect(":memory:")
         if settings.extension_dir:
             self.con.execute(f"SET extension_directory = {q(settings.extension_dir)}")
         self._setup()
+        self.sync_questions(questions or [])
+
+    # ------------------------------------------------- preguntas como fuentes
+    def sync_questions(self, questions: list) -> None:
+        """Publica cada pregunta guardada como vista `preguntas.<alias>`.
+
+        Las vistas se crean en orden de dependencias: se reintenta mientras alguna
+        avance, así una pregunta puede usar otra que se crea más tarde.
+        """
+        with self._ddl:
+            self.con.execute("DROP SCHEMA IF EXISTS preguntas CASCADE")
+            self.con.execute("CREATE SCHEMA preguntas")
+            self.question_errors = {}
+            self._create_views({qq.slug: qq.sql for qq in questions if qq.slug})
+
+    def upsert_question(self, slug: str, sql: str, all_questions: list) -> str | None:
+        """Crea o actualiza la vista de una pregunta. Devuelve el error, si lo hay."""
+        with self._ddl:
+            pending = {slug: sql}
+            # Las que fallaban antes (p. ej. porque dependían de esta) se reintentan
+            pending.update({qq.slug: qq.sql for qq in all_questions if qq.slug in self.question_errors})
+            self.question_errors.pop(slug, None)
+            self._create_views(pending)
+            return self.question_errors.get(slug)
+
+    def drop_question(self, slug: str) -> None:
+        with self._ddl:
+            self.con.execute(f"DROP VIEW IF EXISTS preguntas.{_quote(slug)}")
+            self.question_errors.pop(slug, None)
+
+    def _create_views(self, pending: dict[str, str]) -> None:
+        errors: dict[str, str] = {}
+        while pending:
+            progressed = False
+            for slug, sql in list(pending.items()):
+                try:
+                    body = self.validate(sql)
+                    self.con.execute(f"CREATE OR REPLACE VIEW preguntas.{_quote(slug)} AS {body}")
+                except (QueryError, duckdb.Error) as e:
+                    errors[slug] = _clean_error(str(e))
+                    continue
+                pending.pop(slug)
+                errors.pop(slug, None)
+                progressed = True
+            if not progressed:
+                break
+        self.question_errors.update(errors)
 
     # ------------------------------------------------------------------ setup
     def _setup(self) -> None:

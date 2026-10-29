@@ -1,3 +1,4 @@
-{% with kind="ok", message="Guardada: " ~ name %}{% include "partials/toast.html" %}{% endwith %}
+{% with kind=("error" if view_error else "ok"), message=("Guardada, pero no se pudo publicar como fuente" if view_error else "Guardada: " ~ name ~ " · " ~ q.view) %}{% include "partials/toast.html" %}{% endwith %}
 <input type="hidden" name="id" id="qid" value="{{ qid }}" hx-swap-oob="true">
 <div id="add-to-dash" class="add-to-dash" hx-swap-oob="true">{% include "partials/add_to_dash.html" %}</div>
+{% with question=q, oob=true %}{% include "partials/question_alias.html" %}{% endwith %}

@@ -1,0 +1,31 @@
+{# Barra común del editor SQL y el visual. `mode` = "sql" | "builder" #}
+<form id="save-form" class="question-bar" {% if mode == 'sql' %}data-with-sql{% else %}data-builder{% endif %}
+      hx-post="/questions" hx-target="#toast" hx-swap="innerHTML">
+  <input type="hidden" name="id" id="qid" value="{{ question.id if question else '' }}">
+  <input type="hidden" name="kind" value="{{ mode }}">
+
+  <div role="group" class="mode-switch" aria-label="Tipo de editor">
+    {% if mode == 'builder' %}
+      <button type="button" aria-pressed="true">Visual</button>
+      <button type="button" class="secondary outline" @click="$dispatch('open-as-sql')"
+              data-tooltip="Abre el SQL generado en el editor SQL" data-placement="bottom">SQL</button>
+    {% else %}
+      <a href="/builder" role="button" class="secondary outline"
+         {% if question %}data-tooltip="Nueva pregunta visual" data-placement="bottom"{% endif %}>Visual</a>
+      <button type="button" aria-pressed="true">SQL</button>
+    {% endif %}
+  </div>
+
+  <div class="title-wrap">
+    <input type="text" name="name" class="title-input" placeholder="Pregunta sin título"
+           value="{{ question.name if question else '' }}" aria-label="Nombre de la pregunta">
+    {% include "partials/question_alias.html" %}
+  </div>
+
+  <div class="bar-actions">
+    <div id="add-to-dash" class="add-to-dash" {% if not question %}hidden{% endif %}>
+      {% include "partials/add_to_dash.html" %}
+    </div>
+    <button type="submit" class="secondary outline">Guardar</button>
+  </div>
+</form>

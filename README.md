@@ -8,13 +8,44 @@ el estado de la interfaz.
 
 ## Qué hace
 
+- **Editor visual** para consultar sin escribir SQL: datos, uniones, filtros, métricas y agrupaciones (también por día, mes, trimestre o año), orden y límite. Muestra el SQL generado y lo puede abrir en el editor SQL.
 - **Editor SQL** (CodeMirror) con resaltado, autocompletado de tablas y columnas reales y `Ctrl/⌘ + Enter`.
+- **Preguntas como fuentes de datos**: cada pregunta guardada se puede consultar como `preguntas.<alias>`, desde SQL o como punto de partida en el editor visual.
 - **Fuentes de datos desde la UI**: PostgreSQL, MySQL/MariaDB, SQLite, DuckDB, S3/GCS/R2/MinIO y URLs HTTP, con «Probar conexión», activar/desactivar y recarga en caliente.
 - **Explorador de esquemas**: todas las fuentes en el panel lateral; clic en una columna la inserta, «ver» lanza un `SELECT *`.
 - **Resultados** en tabla paginada en servidor, o como **gráfico** (barras, líneas, área, dispersión, sectores) con Vega-Lite. El gráfico se sugiere solo según los tipos de las columnas.
 - **Preguntas guardadas** con su configuración de gráfico.
 - **Dashboards** con tarjetas de media o anchura completa, refresco manual o automático. Cada tarjeta carga en paralelo con htmx.
 - **Modo oscuro** automático y formato de fechas y números en castellano.
+
+## Editor visual
+
+**Nueva consulta** abre el editor visual. Los pasos se añaden con los botones «＋»:
+
+| Paso | Qué hace |
+|---|---|
+| Datos | tabla de cualquier fuente o una pregunta guardada |
+| Unir datos | unión izquierda o interna; propone sola la condición si hay una columna con el mismo nombre (`cliente_id = cliente_id`) |
+| Filtrar | condiciones según el tipo: igual, entre, contiene, es uno de, últimos N días, vacío… |
+| Resumir | métricas (recuento, suma, media, mínimo, máximo, valores distintos) *por* columnas; las fechas se agrupan por día, semana, mes, trimestre o año |
+| Columnas | qué columnas mostrar cuando no se resume |
+| Ordenar y limitar | por cualquier columna del resultado |
+
+El SQL se genera **en el servidor** a partir de la especificación, comprobando cada tabla, columna, operador y valor contra el esquema real: lo que llega del navegador nunca se concatena en el SQL. El botón **SQL** abre la consulta generada en el editor SQL para seguir a mano.
+
+## Preguntas como fuentes de datos
+
+Cada pregunta guardada (visual o SQL) se publica como una vista de solo lectura en el esquema `preguntas`:
+
+```sql
+SELECT canal, avg(suma_importe)
+FROM preguntas.ventas_por_mes      -- otra pregunta guardada
+GROUP BY canal
+```
+
+- El **alias** se genera del nombre al crearla (`Ventas por mes` → `ventas_por_mes`) y **no cambia al renombrarla**, para no romper las preguntas que la usan. Se ve bajo el título de la pregunta y en la lista de preguntas.
+- Una pregunta **no puede depender de sí misma**, ni directa ni indirectamente: guardar algo que cree un ciclo da un aviso.
+- **No se puede borrar** una pregunta mientras otra la use como fuente; el aviso dice cuáles.
 
 ## Fuentes de datos
 
@@ -127,6 +158,7 @@ patobase/
   config.py        variables de entorno
   engine.py        DuckDB: fuentes, sandbox, ejecución, sugerencia de gráfico
   sources.py       tipos de fuente, formularios, validación y SQL que las adjunta
+  builder.py       editor visual: especificación JSON → SQL validado
   store.py         SQLite: preguntas, dashboards, tarjetas y fuentes
   main.py          rutas FastAPI (páginas completas y parciales htmx)
   templates/       Jinja2; partials/ son los fragmentos que intercambia htmx
@@ -147,6 +179,6 @@ Los metadatos van en SQLite y no en DuckDB porque son escrituras pequeñas y con
 - Parámetros en las preguntas (`WHERE fecha >= $desde`) y filtros globales del dashboard.
 - Usuarios y permisos por fuente (y cifrar las contraseñas guardadas).
 - Caché de resultados con TTL.
-- Constructor visual de consultas (sin SQL) con SQLGlot o Ibis.
+- Filtros sobre el resultado agregado (HAVING) y columnas calculadas en el editor visual.
 - Reordenar tarjetas arrastrando.
 - Exportar resultados a CSV / Parquet.

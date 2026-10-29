@@ -16,8 +16,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
+from .builder import BuildError, catalog_from_schema, compile_spec, ui_catalog
 from .config import settings
-from .engine import Engine, QueryError, apply_source, suggest_chart, to_records, vega_type
+from .engine import Engine, QueryError, apply_source, find_cycle, question_deps, suggest_chart, to_records, vega_type
 from .sources import ATTACHED, KINDS, Source, SourceError, from_form, q
 from .store import Store
 
@@ -51,7 +52,7 @@ def rebuild_engine(app: FastAPI) -> Engine:
     Las consultas en curso siguen con el motor anterior hasta que terminan.
     """
     with _rebuild_lock:
-        new = Engine(settings, app.state.store.list_sources())
+        new = Engine(settings, app.state.store.list_sources(), app.state.store.list_questions())
         app.state.engine = new
         return new
 
@@ -88,16 +89,18 @@ def render(request: Request, template: str, status_code: int = 200, **ctx) -> HT
 # Editor
 # ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-def editor(request: Request, q: int | None = None):
+def editor(request: Request, q: int | None = None, sql: str = ""):
     question = store(request).get_question(q) if q else None
     if q and not question:
         raise HTTPException(404, "Pregunta no encontrada")
+    if question and question.kind == "builder" and not sql:
+        return RedirectResponse(question.edit_url, 303)
     default_sql = "SELECT *\nFROM files.ventas\nLIMIT 100"
     return render(
         request,
         "editor.html",
         question=question,
-        sql=question.sql if question else default_sql,
+        sql=sql or (question.sql if question else default_sql),
         dashboards=store(request).list_dashboards(),
     )
 
@@ -116,6 +119,11 @@ def completions(request: Request):
 
 @app.post("/query/run", response_class=HTMLResponse)
 def run_query(request: Request, sql: str = Form(...), viz: str = Form("")):
+    return results_response(request, sql, viz)
+
+
+def results_response(request: Request, sql: str, viz: str = "", extra: str = "") -> HTMLResponse:
+    """Ejecuta `sql` y pinta el panel de resultados (tabla + gráfico)."""
     try:
         res = engine(request).run(sql, limit=settings.chart_rows)
     except QueryError as e:
@@ -143,6 +151,7 @@ def run_query(request: Request, sql: str = Form(...), viz: str = Form("")):
         col_types={c: vega_type(t) for c, t in zip(res.columns, res.types, strict=False)},
         truncated=res.has_more,
         chart_rows=settings.chart_rows,
+        extra=extra,
     )
 
 
@@ -175,28 +184,71 @@ def questions(request: Request):
 def save_question(
     request: Request,
     name: str = Form(...),
-    sql: str = Form(...),
+    sql: str = Form(""),
     viz: str = Form("{}"),
     description: str = Form(""),
     id: int | None = Form(None),
+    kind: str = Form("sql"),
+    spec: str = Form(""),
 ):
+    def fail(msg: str) -> HTMLResponse:
+        return render(request, "partials/toast.html", kind="error", message=msg)
+
+    st = store(request)
     name = name.strip()
     if not name:
-        return render(request, "partials/toast.html", kind="error", message="Ponle un nombre a la pregunta.")
+        return fail("Ponle un nombre a la pregunta.")
     try:
-        Engine.validate(sql)
         viz_obj = json.loads(viz or "{}")
-    except (QueryError, json.JSONDecodeError) as e:
-        return render(request, "partials/toast.html", kind="error", message=f"No se ha guardado: {e}")
-    qid = store(request).save_question(name, sql, viz_obj, description, id)
-    resp = render(request, "partials/saved.html", qid=qid, name=name, dashboards=store(request).list_dashboards())
-    resp.headers["HX-Replace-Url"] = f"/?q={qid}"
+        spec_obj = None
+        if kind == "builder":
+            # El SQL de una pregunta visual se genera siempre aquí, nunca se acepta del navegador
+            spec_obj = json.loads(spec or "{}")
+            sql = compile_spec(spec_obj, catalog_from_schema(engine(request).schema())).sql
+        elif kind != "sql":
+            return fail("Tipo de pregunta no válido.")
+        sql = Engine.validate(sql)
+    except (QueryError, BuildError, json.JSONDecodeError) as e:
+        return fail(f"No se ha guardado: {e}")
+
+    # Una pregunta no puede depender (directa o indirectamente) de sí misma
+    slug = st.next_slug(name, id)
+    graph = {qq.slug: question_deps(qq.sql) for qq in st.list_questions() if qq.id != id}
+    graph[slug] = question_deps(sql)
+    cycle = find_cycle(graph, slug)
+    if cycle:
+        return fail("No se ha guardado: crearía un ciclo entre preguntas (" + " → ".join(cycle) + ").")
+
+    qid = st.save_question(name, sql, viz_obj, description, id, kind, spec_obj)
+    q = st.get_question(qid)
+    view_error = engine(request).upsert_question(q.slug, q.sql, st.list_questions())
+    resp = render(
+        request,
+        "partials/saved.html",
+        q=q,
+        qid=qid,
+        name=name,
+        view_error=view_error,
+        dashboards=st.list_dashboards(),
+    )
+    resp.headers["HX-Replace-Url"] = q.edit_url
     return resp
 
 
 @app.post("/questions/{qid}/delete")
 def delete_question(request: Request, qid: int):
-    store(request).delete_question(qid)
+    st = store(request)
+    q = st.get_question(qid)
+    if q:
+        users = [o.name for o in st.list_questions() if o.id != qid and q.slug in question_deps(o.sql)]
+        if users:
+            msg = f"No se puede borrar: la usan como fuente {', '.join('«' + u + '»' for u in users)}."
+            resp = render(request, "partials/toast.html", kind="error", message=msg)
+            resp.headers["HX-Retarget"] = "#toast"
+            resp.headers["HX-Reswap"] = "innerHTML"
+            return resp
+        st.delete_question(qid)
+        engine(request).drop_question(q.slug)
     if is_htmx(request):
         return Response("")
     return RedirectResponse("/questions", 303)
@@ -227,6 +279,58 @@ def question_card(request: Request, qid: int):
         config=config,
         col_types={c: vega_type(t) for c, t in zip(res.columns, res.types, strict=False)},
     )
+
+
+# ---------------------------------------------------------------------------
+# Editor visual
+# ---------------------------------------------------------------------------
+@app.get("/builder", response_class=HTMLResponse)
+def builder_page(request: Request, q: int | None = None, source: str = ""):
+    question = store(request).get_question(q) if q else None
+    if q and not question:
+        raise HTTPException(404, "Pregunta no encontrada")
+    if question and question.kind != "builder":
+        return RedirectResponse(question.edit_url, 303)
+    catalog = catalog_from_schema(engine(request).schema())
+    spec = question.spec if question else {"source": source if source in catalog else ""}
+    return render(
+        request,
+        "builder.html",
+        question=question,
+        spec=spec,
+        catalog=ui_catalog(catalog),
+        dashboards=store(request).list_dashboards(),
+    )
+
+
+async def _spec_from(request: Request) -> tuple[dict, str]:
+    form = await request.form()
+    try:
+        spec = json.loads(str(form.get("spec", "")) or "{}")
+    except json.JSONDecodeError as e:
+        raise BuildError("Especificación no válida.") from e
+    return spec, str(form.get("viz", ""))
+
+
+@app.post("/builder/compile")
+async def builder_compile(request: Request):
+    """SQL generado y columnas de salida, para la vista previa y el paso «Ordenar»."""
+    try:
+        spec, _ = await _spec_from(request)
+        c = compile_spec(spec, catalog_from_schema(engine(request).schema()))
+    except BuildError as e:
+        return JSONResponse({"error": str(e)})
+    return JSONResponse({"sql": c.sql, "columns": c.columns})
+
+
+@app.post("/builder/run", response_class=HTMLResponse)
+async def builder_run(request: Request):
+    try:
+        spec, viz = await _spec_from(request)
+        c = compile_spec(spec, catalog_from_schema(engine(request).schema()))
+    except BuildError as e:
+        return render(request, "partials/error.html", error=str(e))
+    return await run_in_threadpool(results_response, request, c.sql, viz)
 
 
 # ---------------------------------------------------------------------------

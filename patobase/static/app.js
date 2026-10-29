@@ -56,7 +56,20 @@
   }
 
   // Inyecta el SQL del editor y la configuración del gráfico en cada petición
+  const currentViz = () => {
+    const viz = window.Alpine && Alpine.store("viz").config;
+    if (viz) return JSON.stringify(viz);
+    const init = document.getElementById("initial-viz");
+    return init ? init.textContent : "";
+  };
+
   document.addEventListener("htmx:configRequest", (evt) => {
+    // Editor visual: se envía la especificación; el SQL lo genera el servidor
+    if (evt.detail.elt.closest("[data-builder]") && window.patobaseBuilder) {
+      evt.detail.parameters["spec"] = JSON.stringify(window.patobaseBuilder.spec);
+      evt.detail.parameters["viz"] = currentViz();
+      return;
+    }
     const form = evt.detail.elt.closest("[data-with-sql]");
     if (!form) return;
     if (editor) evt.detail.parameters["sql"] = editor.getValue();
@@ -208,6 +221,161 @@
   });
 
   // Al cambiar el tema del sistema, redibujar con los colores nuevos
+  // ------------------------------------------------------- editor visual
+  const emptySpec = (source = "") => ({
+    source, joins: [], filters: [], metrics: [], groups: [], columns: [], sort: [], limit: null,
+  });
+
+  document.addEventListener("alpine:init", () => {
+    Alpine.data("builder", (initial, catalog) => ({
+      catalog,
+      spec: { ...emptySpec(), ...initial },
+      compiled: { sql: "", columns: [], error: "" },
+      showSql: false,
+      showColumnsStep: false,
+      running: false,
+      _timer: null,
+
+      init() {
+        window.patobaseBuilder = this;
+        this.$watch("spec", () => {
+          clearTimeout(this._timer);
+          this._timer = setTimeout(() => this.compile(), 250);
+        });
+        this.compile().then(() => { if (initial && initial.source && document.getElementById("initial-viz")) this.run(); });
+      },
+
+      get showColumns() {
+        return !this.spec.metrics.length && !this.spec.groups.length && (this.showColumnsStep || this.spec.columns.length > 0);
+      },
+
+      // ---- catálogo
+      tableColumns(key) { return (this.catalog.tables[key] || {}).columns || []; },
+      tableName(key) { return (this.catalog.tables[key] || {}).name || key; },
+      tables() { return [this.spec.source, ...this.spec.joins.map((j) => j.table)]; },
+      columnsUpTo(i) {
+        // columnas de las tablas anteriores a la unión i (t0..ti)
+        return this.tables().slice(0, i + 1).flatMap((key, idx) => this.columnsOf(key, idx));
+      },
+      columnsOf(key, idx) {
+        const multi = this.spec.joins.length > 0;
+        return this.tableColumns(key).map(([name, type]) => ({
+          ref: `t${idx}.${name}`, type,
+          label: multi ? `${this.tableName(key)} · ${name}` : name,
+        }));
+      },
+      allColumns() { return this.tables().flatMap((key, idx) => (key ? this.columnsOf(key, idx) : [])); },
+      typeOf(ref) { const c = this.allColumns().find((x) => x.ref === ref); return c ? c.type : "nominal"; },
+      isTemporal(ref) { return this.typeOf(ref) === "temporal"; },
+      opsFor(ref) { return this.catalog.opsByType[this.typeOf(ref)] || []; },
+      needsValue(op) { return !!op && !this.catalog.noValue.includes(op); },
+      inputType(f) {
+        if (f.op === "in" || f.op === "last_days") return f.op === "last_days" ? "number" : "text";
+        const t = this.typeOf(f.col);
+        return t === "temporal" ? "date" : t === "quantitative" ? "number" : "text";
+      },
+      placeholder(f) {
+        if (f.op === "in") return "valor1, valor2, …";
+        if (f.op === "last_days") return "días";
+        return "valor";
+      },
+      metricColumns(agg) {
+        const need = this.catalog.aggNeeds[agg];
+        return this.allColumns().filter((c) => !need || c.type === need);
+      },
+      firstColumn(pred = () => true) { const c = this.allColumns().find(pred); return c ? c.ref : ""; },
+
+      // ---- pasos
+      resetFromSource() {
+        const src = this.spec.source;
+        Object.assign(this.spec, emptySpec(src));
+        this.showColumnsStep = false;
+      },
+      guessJoin(j, i) {
+        // Propone la condición de unión: una columna con el mismo nombre en ambos lados,
+        // prefiriendo identificadores (cliente_id = cliente_id, id = id…)
+        const right = this.tableColumns(j.table).map((c) => c[0]);
+        const left = this.columnsUpTo(i);
+        const score = (name) => (name.endsWith("_id") ? 2 : name === "id" ? 1 : 0);
+        const pairs = left
+          .map((c) => ({ ref: c.ref, name: c.ref.split(".").slice(1).join(".") }))
+          .filter((c) => right.includes(c.name))
+          .sort((a, b) => score(b.name) - score(a.name));
+        if (pairs.length) { j.left = pairs[0].ref; j.right = pairs[0].name; return; }
+        j.right = right.find((c) => c.endsWith("_id")) || right[0] || "";
+      },
+      addJoin() {
+        this.spec.joins.push({ table: "", how: "left", left: this.firstColumn(), right: "" });
+      },
+      trimAfterJoin(i) {
+        // Si cambia la tabla de una unión, se quitan referencias a sus columnas antiguas
+        const prefix = `t${i + 1}.`;
+        const keep = (ref) => !ref || !ref.startsWith(prefix);
+        this.spec.filters = this.spec.filters.filter((f) => keep(f.col));
+        this.spec.metrics = this.spec.metrics.filter((m) => keep(m.col));
+        this.spec.groups = this.spec.groups.filter((g) => keep(g.col));
+        this.spec.columns = this.spec.columns.filter(keep);
+      },
+      removeJoin(i) {
+        // Quitar la unión i desplaza los alias de las siguientes: se limpian sus referencias
+        const n = this.spec.joins.length;
+        for (let k = i; k < n; k++) this.trimAfterJoin(k);
+        this.spec.joins.splice(i);
+      },
+      addFilter() {
+        const col = this.firstColumn();
+        this.spec.filters.push({ col, op: this.opsFor(col)[0], value: "", value2: "" });
+      },
+      addMetric() { this.spec.metrics.push({ agg: "count", col: "" }); },
+      fixMetric(m) {
+        const ok = this.metricColumns(m.agg).some((c) => c.ref === m.col);
+        if (m.agg !== "count" && !ok) m.col = (this.metricColumns(m.agg)[0] || {}).ref || "";
+      },
+      addGroup() {
+        const col = this.firstColumn((c) => c.type !== "quantitative") || this.firstColumn();
+        this.spec.groups.push({ col, bucket: this.isTemporal(col) ? "month" : "" });
+        this.spec.columns = [];
+      },
+      addSort() {
+        const by = (this.compiled.columns[0] || {}).name || "";
+        this.spec.sort.push({ by, dir: this.spec.metrics.length ? "desc" : "asc" });
+      },
+
+      // ---- servidor
+      async compile() {
+        if (!this.spec.source) { this.compiled = { sql: "", columns: [], error: "" }; return; }
+        const body = new URLSearchParams({ spec: JSON.stringify(this.spec) });
+        try {
+          const r = await fetch("/builder/compile", { method: "POST", body });
+          const data = await r.json();
+          this.compiled = { sql: data.sql || "", columns: data.columns || [], error: data.error || "" };
+          // Quita órdenes por columnas que ya no existen en la salida
+          const names = new Set(this.compiled.columns.map((c) => c.name));
+          if (!data.error && this.spec.sort.some((o) => !names.has(o.by))) {
+            this.spec.sort = this.spec.sort.filter((o) => names.has(o.by));
+          }
+        } catch (e) {
+          this.compiled.error = "No se pudo contactar con el servidor.";
+        }
+      },
+      async run() {
+        if (!this.spec.source) return;
+        this.running = true;
+        try {
+          await htmx.ajax("POST", "/builder/run", {
+            target: "#results", swap: "innerHTML",
+            values: { spec: JSON.stringify(this.spec), viz: currentViz() },
+          });
+        } finally {
+          this.running = false;
+        }
+      },
+      openAsSql() {
+        if (this.compiled.sql) window.location = "/?sql=" + encodeURIComponent(this.compiled.sql);
+      },
+    }));
+  });
+
   function redrawCharts() {
     document.querySelectorAll("[x-data]").forEach((el) => {
       const d = window.Alpine && Alpine.$data(el);

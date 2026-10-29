@@ -289,3 +289,60 @@ nav[aria-label="breadcrumb"] { margin-bottom: 0.5rem; }
 .theme-toggle:hover { color: var(--pico-primary); background: var(--sunken); }
 .theme-toggle:focus-visible { box-shadow: 0 0 0 3px var(--pico-primary-focus); }
 .theme-toggle svg { width: 1.15rem; height: 1.15rem; }
+
+/* ----------------------------------------------------- barra de pregunta */
+.mode-switch { width: auto; margin: 0; flex: none; }
+.mode-switch > * { padding: 0.3rem 0.85rem; font-size: 0.85rem; }
+.title-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.q-alias { color: var(--muted); font-size: 0.75rem; padding-left: 0.4rem; min-height: 1.1em; }
+.q-alias code { font-size: 0.72rem; padding: 0.05rem 0.35rem; }
+.q-alias .err-msg { display: inline; max-width: none; }
+.kind-builder { --kind: var(--pico-primary); }
+.kind-sqlq { --kind: #6c7a89; }
+
+/* -------------------------------------------------------- editor visual */
+main.builder-page { max-width: 1280px; }
+.builder-page .question-bar { margin-bottom: 1rem; }
+.notebook { display: flex; flex-direction: column; gap: 0.6rem; }
+.nb-step {
+  border: 1px solid var(--line); border-left: 4px solid var(--step, var(--line));
+  border-radius: var(--pico-border-radius); background: var(--pico-card-background-color);
+  padding: 0.6rem 0.9rem 0.7rem;
+}
+.nb-step h6 { margin: 0 0 0.45rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--step, var(--muted)); }
+.step-data      { --step: #2f6fdb; }
+.step-join      { --step: #8a5cd6; }
+.step-filter    { --step: #c2453d; }
+.step-summarize { --step: #2a9d6f; }
+.step-columns   { --step: #6c7a89; }
+.step-sort      { --step: #b06f00; }
+.nb-step select, .nb-step input { margin: 0; width: auto; min-width: 10rem; font-size: 0.88rem; padding-block: 0.35rem; }
+.nb-step .step-data select, .step-data select { width: 100%; max-width: 32rem; }
+.nb-step select.w-auto { min-width: 0; }
+.nb-step input.w-limit { min-width: 0; width: 7rem; }
+.nb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-bottom: 0.4rem; }
+.nb-row:last-child { margin-bottom: 0; }
+.nb-word { color: var(--muted); font-size: 0.85rem; }
+.nb-summarize { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.nb-by { display: flex; gap: 0.6rem; align-items: flex-start; }
+.nb-by > .nb-word { padding-top: 0.45rem; }
+.nb-summarize p { margin: 0.3rem 0 0; }
+.nb-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; }
+.chip {
+  display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; cursor: pointer;
+  padding: 0.15rem 0.6rem; border: 1px solid var(--line); border-radius: 99px; font-size: 0.8rem;
+}
+.chip input { margin: 0; width: 0.85rem; height: 0.85rem; min-width: 0; }
+.chip:has(input:checked) { border-color: var(--pico-primary-border); background: var(--pico-primary-focus); }
+.nb-add { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; }
+.nb-add button { width: auto; margin: 0; padding: 0.25rem 0.75rem; font-size: 0.82rem; }
+.nb-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 1rem 0 0.6rem; }
+.nb-actions button { width: auto; margin: 0; }
+.err-inline { color: var(--danger); }
+.nb-sql { margin: 0 0 1rem; padding: 0.75rem 1rem; font-size: 0.8rem; white-space: pre-wrap; }
+
+@media (max-width: 860px) {
+  .nb-summarize { grid-template-columns: 1fr; }
+  .nb-step select, .nb-step input { min-width: 0; width: 100%; }
+  .question-bar { flex-wrap: wrap; }
+}

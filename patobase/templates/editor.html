@@ -25,18 +25,7 @@
 </aside>
 
 <section class="editor-pane">
-  <form id="save-form" class="question-bar" data-with-sql
-        hx-post="/questions" hx-target="#toast" hx-swap="innerHTML">
-    <input type="hidden" name="id" id="qid" value="{{ question.id if question else '' }}">
-    <input type="text" name="name" class="title-input" placeholder="Pregunta sin título"
-           value="{{ question.name if question else '' }}" aria-label="Nombre de la pregunta">
-    <div class="bar-actions">
-      <div id="add-to-dash" class="add-to-dash" {% if not question %}hidden{% endif %}>
-        {% include "partials/add_to_dash.html" %}
-      </div>
-      <button type="submit" class="secondary outline">Guardar</button>
-    </div>
-  </form>
+  {% with mode="sql" %}{% include "partials/question_bar.html" %}{% endwith %}
 
   <form id="run-form" data-with-sql
         hx-post="/query/run" hx-target="#results" hx-swap="innerHTML"

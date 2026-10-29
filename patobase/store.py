@@ -7,8 +7,10 @@ concurrentes, justo lo que DuckDB no hace bien (un solo escritor por proceso).
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +50,27 @@ CREATE TABLE IF NOT EXISTS sources (
 """
 
 
+# Columnas añadidas después de la primera versión: se crean si faltan
+MIGRATIONS = {
+    "questions": [
+        ("kind", "TEXT NOT NULL DEFAULT 'sql'"),  # 'sql' | 'builder'
+        ("spec", "TEXT NOT NULL DEFAULT ''"),  # JSON del editor visual
+        ("slug", "TEXT"),  # alias estable: preguntas.<slug>
+    ],
+}
+
+
+def slugify(text: str) -> str:
+    """«Ventas por categoría (2026)» → ventas_por_categoria_2026"""
+    t = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    t = re.sub(r"[^a-z0-9]+", "_", t).strip("_")[:50].rstrip("_")
+    if not t:
+        t = "pregunta"
+    if t[0].isdigit():
+        t = f"p_{t}"
+    return t
+
+
 @dataclass
 class Question:
     id: int
@@ -56,6 +79,18 @@ class Question:
     sql: str
     viz: dict[str, Any]
     updated_at: str
+    kind: str = "sql"
+    spec: dict[str, Any] = field(default_factory=dict)
+    slug: str = ""
+
+    @property
+    def view(self) -> str:
+        """Nombre con el que se consulta como fuente de datos."""
+        return f"preguntas.{self.slug}"
+
+    @property
+    def edit_url(self) -> str:
+        return f"/builder?q={self.id}" if self.kind == "builder" else f"/?q={self.id}"
 
 
 @dataclass
@@ -78,6 +113,16 @@ class Store:
         self.path = path
         with self._conn() as c:
             c.executescript(SCHEMA)
+            for table, cols in MIGRATIONS.items():
+                have = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+                for col, ddl in cols:
+                    if col not in have:
+                        c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+            for r in c.execute("SELECT id, name FROM questions WHERE slug IS NULL OR slug = ''").fetchall():
+                c.execute(
+                    "UPDATE questions SET slug = ? WHERE id = ?", (self._unique_slug(c, r["name"], r["id"]), r["id"])
+                )
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS questions_slug ON questions(slug)")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path)
@@ -86,8 +131,26 @@ class Store:
         return c
 
     @staticmethod
+    def _unique_slug(c: sqlite3.Connection, name: str, qid: int | None = None) -> str:
+        base = slugify(name)
+        slug, n = base, 2
+        while c.execute("SELECT 1 FROM questions WHERE slug = ? AND id IS NOT ?", (slug, qid)).fetchone():
+            slug, n = f"{base}_{n}", n + 1
+        return slug
+
+    @staticmethod
     def _q(r: sqlite3.Row) -> Question:
-        return Question(r["id"], r["name"], r["description"], r["sql"], json.loads(r["viz"]), r["updated_at"])
+        return Question(
+            r["id"],
+            r["name"],
+            r["description"],
+            r["sql"],
+            json.loads(r["viz"]),
+            r["updated_at"],
+            r["kind"] or "sql",
+            json.loads(r["spec"]) if r["spec"] else {},
+            r["slug"] or "",
+        )
 
     # -------------------------------------------------------------- questions
     def list_questions(self) -> list[Question]:
@@ -99,19 +162,41 @@ class Store:
             r = c.execute("SELECT * FROM questions WHERE id = ?", (qid,)).fetchone()
             return self._q(r) if r else None
 
-    def save_question(self, name: str, sql: str, viz: dict, description: str = "", qid: int | None = None) -> int:
+    def save_question(
+        self,
+        name: str,
+        sql: str,
+        viz: dict,
+        description: str = "",
+        qid: int | None = None,
+        kind: str = "sql",
+        spec: dict | None = None,
+    ) -> int:
+        """Guarda una pregunta. El alias (slug) se fija al crearla y no cambia al renombrarla,
+        para no romper otras preguntas que la usen como fuente."""
+        spec_json = json.dumps(spec) if spec else ""
         with self._conn() as c:
             if qid:
                 c.execute(
-                    "UPDATE questions SET name=?, description=?, sql=?, viz=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                    (name, description, sql, json.dumps(viz), qid),
+                    "UPDATE questions SET name=?, description=?, sql=?, viz=?, kind=?, spec=?, "
+                    "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                    (name, description, sql, json.dumps(viz), kind, spec_json, qid),
                 )
                 return qid
             cur = c.execute(
-                "INSERT INTO questions (name, description, sql, viz) VALUES (?, ?, ?, ?)",
-                (name, description, sql, json.dumps(viz)),
+                "INSERT INTO questions (name, description, sql, viz, kind, spec, slug) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (name, description, sql, json.dumps(viz), kind, spec_json, self._unique_slug(c, name)),
             )
             return int(cur.lastrowid)
+
+    def next_slug(self, name: str, qid: int | None = None) -> str:
+        """El alias que tendría una pregunta nueva con este nombre (o el actual si ya existe)."""
+        with self._conn() as c:
+            if qid:
+                r = c.execute("SELECT slug FROM questions WHERE id = ?", (qid,)).fetchone()
+                if r and r["slug"]:
+                    return r["slug"]
+            return self._unique_slug(c, name, qid)
 
     def delete_question(self, qid: int) -> None:
         with self._conn() as c:

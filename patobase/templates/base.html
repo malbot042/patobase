@@ -41,7 +41,7 @@
         </li>
       </ul>
       <ul>
-        <li><a href="/" {% if path == '/' %}aria-current="page"{% endif %}>Nueva consulta</a></li>
+        <li><a href="/builder" {% if path == '/' or path.startswith('/builder') %}aria-current="page"{% endif %}>Nueva consulta</a></li>
         <li><a href="/questions" {% if path.startswith('/questions') %}aria-current="page"{% endif %}>Preguntas</a></li>
         <li><a href="/dashboards" {% if path.startswith('/dashboards') %}aria-current="page"{% endif %}>Dashboards</a></li>
         <li><a href="/sources" {% if path.startswith('/sources') %}aria-current="page"{% endif %}>Fuentes</a></li>
